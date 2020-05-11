@@ -1,4 +1,4 @@
 # Manhattan
 
-export FLASK_APP=master.py
-flash run
+1. `export FLASK_APP=master.py`
+2. `flask run`
