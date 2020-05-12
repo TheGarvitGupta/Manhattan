@@ -6,11 +6,11 @@ kAuthorizationClientStaticFile = "AuthorizationClient.html"
 
 @app.route('/')
 def home():
-    return send_from_directory('', kAuthorizationClientStaticFile)
+    return send_from_directory('html', kAuthorizationClientStaticFile)
 
-@app.route('/js/<path:path>')
+@app.route('/javascript/<path:path>')
 def javascript(path):
-    return send_from_directory('js', path)
+    return send_from_directory('javascript', path)
 
 @app.route('/css/<path:path>')
 def css(path):
