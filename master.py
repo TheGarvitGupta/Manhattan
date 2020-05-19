@@ -10,6 +10,8 @@ from globalParams import kStravaClientID
 from authorizationRequests import stravaAuthorizeRequest
 from authorizationRequests import stravaTokenRequest
 
+from authorizationRequests import spotifyAuthorizeRequest
+
 from flask import Flask
 from flask import send_from_directory
 from flask import redirect
@@ -35,6 +37,12 @@ def stravaAuthorize():
 	strava_authorize_url = stravaAuthorizeRequest()
 	return redirect(strava_authorize_url)
 
+# Spotify /Authorize
+@app.route('/linkSpotify')
+def spotifyAuthorize():
+	spotify_authorize_url = spotifyAuthorizeRequest()
+	return redirect(spotify_authorize_url)
+
 # Return from Strava /Authorize make request to Strava /Token
 @app.route('/stravaToken')
 def stravaToken():
@@ -48,6 +56,8 @@ def stravaToken():
 
 	print(scope.split(","))
 	print(sorted(scope.split(",")))
+
+	status = {}
 
 	if (error):		
 		# Redirect to home with `error`
@@ -65,14 +75,9 @@ def stravaToken():
 		# initiate strava token exchange
 		strava_token_params = stravaTokenRequest(code)
 		result = requests.post(kStravaTokenURL, strava_token_params)
-		
-
-		print ("TokenReceiveD", result.text)
-		
-
 		return result.text
-		# invoke stravaTokenRequest to return url and post params
-		# make the post request
+
+		#create account for user
 		# retrieve the access, refresh tokens
 		# send to home with success
 		# if tokens missing, send to home with failure
