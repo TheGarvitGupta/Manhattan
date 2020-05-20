@@ -43,7 +43,7 @@ def spotifyAuthorize():
 	spotify_authorize_url = spotifyAuthorizeRequest()
 	return redirect(spotify_authorize_url)
 
-# Return from Strava /Authorize make request to Strava /Token
+# Strava /Token
 @app.route('/stravaToken')
 def stravaToken():
 	# extract stuff and make more requetss
@@ -63,11 +63,11 @@ def stravaToken():
 		# Redirect to home with `error`
 		return "Error occurred"
 
-	if (sorted(scope.split(",")) != sorted(kStravaScope)):
+	elif (sorted(scope.split(",")) != sorted(kStravaScope)):
 		# Redirect to home with failure
 		return "Scopes mismatch"
 
-	if (not code):
+	elif (not code):
 		# Redirect to home with no code failure
 		return "No code"
 
@@ -76,8 +76,22 @@ def stravaToken():
 		strava_token_params = stravaTokenRequest(code)
 		result = requests.post(kStravaTokenURL, strava_token_params)
 		return result.text
-
-		#create account for user
+		# create account for user
 		# retrieve the access, refresh tokens
 		# send to home with success
 		# if tokens missing, send to home with failure
+
+# Spotify /Token
+@app.route('/spotifyToken')
+def spotifyToken():
+	code = request.args.get('code')
+	error = request.args.get('error')
+
+	if (error):
+		# redirect to home with unauthorized - error
+		return error + ""
+	elif (not code):
+		# redirect to home with unauthorized - no code
+		return "No code"
+	else:
+		return "Success"

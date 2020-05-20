@@ -9,5 +9,5 @@ kStravaClientID = "38171"
 kSpotifyAuthorizeURL = "https://accounts.spotify.com/authorize"
 kSpotifyTokenURL = "https://accounts.spotify.com/api/token"
 kSpotifyRedirectURI = "http://localhost:5000/spotifyToken"
-kSpotifyScope = "ugc-image-upload, user-read-playback-state, streaming" #this needs to be populated
+kSpotifyScope = "ugc-image-upload, user-read-playback-state, streaming, user-library-modify" #this needs to be populated
 kSpotifyClientID = "8bff943da02b4f409395f371441b3990"

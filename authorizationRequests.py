@@ -36,3 +36,6 @@ def spotifyAuthorizeRequest():
 	query_prams_dict['response_type'] = "code"
 	query_prams_dict['scope'] = kSpotifyScope
 	return kSpotifyAuthorizeURL + "?" + urlencode(query_prams_dict)
+
+def spotifyTokenRequest(authorization_code):
+	return None
