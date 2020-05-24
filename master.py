@@ -1,4 +1,5 @@
 import requests
+import json
 
 from globalParams import kAuthorizationClientStaticFile
 from globalParams import kStravaAuthorizeURL
@@ -8,16 +9,35 @@ from globalParams import kStravaScope
 from globalParams import kStravaClientID
 
 from authorizationRequests import stravaAuthorizeRequest
-from authorizationRequests import stravaTokenRequest
-
 from authorizationRequests import spotifyAuthorizeRequest
+from authorizationRequests import stravaTokenRequest
+from authorizationRequests import spotifyTokenRequest
+
+from privateParams import kAppSecretKey
 
 from flask import Flask
 from flask import send_from_directory
 from flask import redirect
 from flask import request
+from flask import session
 
 app = Flask(__name__)
+app.secret_key = kAppSecretKey
+
+@app.route('/status')
+def status():
+	status = {}
+	status["strava"] = False
+	status["spotify"] = False
+
+	print(session)
+	if "isStravaAuthenticated" in session:
+		if session["isStravaAuthenticated"]:
+			status["strava"] = True
+	if "isSpotifyAuthenticated" in session:
+		if session["isSpotifyAuthenticated"]:
+			status["spotify"] = True
+	return json.dumps(status)
 
 @app.route('/')
 def home():
@@ -73,6 +93,8 @@ def stravaToken():
 
 	else:
 		# initiate strava token exchange
+		session['isStravaAuthenticated'] = True
+		print(session)
 		strava_token_params = stravaTokenRequest(code)
 		result = requests.post(kStravaTokenURL, strava_token_params)
 		return result.text
@@ -94,4 +116,5 @@ def spotifyToken():
 		# redirect to home with unauthorized - no code
 		return "No code"
 	else:
+		session['isSpotifyAuthenticated'] = True
 		return "Success"
