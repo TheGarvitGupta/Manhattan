@@ -1,5 +1,6 @@
 import requests
 import json
+import sqlite3
 
 from globalParams import kAuthorizationClientStaticFile
 from globalParams import kStravaAuthorizeURL
@@ -14,6 +15,8 @@ from authorizationRequests import stravaTokenRequest
 from authorizationRequests import spotifyTokenRequest
 
 from privateParams import kAppSecretKey
+from privateParams import kDatabaseName
+from privateParams import kStartEnginePath
 
 from flask import Flask
 from flask import send_from_directory
@@ -21,8 +24,14 @@ from flask import redirect
 from flask import request
 from flask import session
 
+from controllerMethods import applicationStatistics
+from controllerMethods import startEngine
+
 app = Flask(__name__)
 app.secret_key = kAppSecretKey
+
+conn = sqlite3.connect(kDatabaseName)
+c = conn.cursor()
 
 @app.route('/status')
 def status():
@@ -118,3 +127,9 @@ def spotifyToken():
 	else:
 		session['isSpotifyAuthenticated'] = True
 		return "Success"
+
+# Start / Restart server
+@app.route(kStartEnginePath)
+def startOrNOOP():
+	engineStatus = startEngine()
+	return engineStatus
