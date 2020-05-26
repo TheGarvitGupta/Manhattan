@@ -26,12 +26,13 @@ from flask import session
 
 from controllerMethods import applicationStatistics
 from controllerMethods import startEngine
+from controllerMethods import createUserFromStrava
 
 app = Flask(__name__)
 app.secret_key = kAppSecretKey
 
-conn = sqlite3.connect(kDatabaseName)
-c = conn.cursor()
+connnection = sqlite3.connect(kDatabaseName)
+cursor = connnection.cursor()
 
 @app.route('/status')
 def status():
@@ -106,11 +107,13 @@ def stravaToken():
 		print(session)
 		strava_token_params = stravaTokenRequest(code)
 		result = requests.post(kStravaTokenURL, strava_token_params)
+		createUserFromStrava(result)
 		return result.text
 		# create account for user
 		# retrieve the access, refresh tokens
 		# send to home with success
 		# if tokens missing, send to home with failure
+
 
 # Spotify /Token
 @app.route('/spotifyToken')
@@ -130,6 +133,6 @@ def spotifyToken():
 
 # Start / Restart server
 @app.route(kStartEnginePath)
-def startOrNOOP():
+def restartServer():
 	engineStatus = startEngine()
 	return engineStatus
