@@ -35,7 +35,7 @@ from flask import session
 
 from controllerMethods import applicationStatistics
 from controllerMethods import startEngine
-from controllerMethods import createUserFromStrava
+from controllerMethods import createUserFromSession
 
 app = Flask(__name__)
 app.secret_key = kAppSecretKey
@@ -45,12 +45,9 @@ cursor = connnection.cursor()
 
 @app.route('/status')
 def status():
-	print session
 	sessionString = {}
-
 	for key in session:
 		sessionString[key] = session[key]
-	
 	return sessionString
 
 @app.route('/')
@@ -108,9 +105,6 @@ def stravaToken():
 		strava_token_params = stravaTokenRequest(code)
 		result = requests.post(kStravaTokenURL, strava_token_params).json()
 
-		session['strava_code'] = code
-		session['strava_scope'] = scope
-
 		session['strava_access_token'] = result["access_token"]
 		session['strava_refresh_token'] = result["refresh_token"]
 		session['strava_athlete'] = result["athlete"]
@@ -125,7 +119,6 @@ def stravaToken():
 # Spotify /Token
 @app.route('/spotifyToken')
 def spotifyToken():
-	print("here")
 	code = request.args.get('code')
 	error = request.args.get('error')
 
@@ -138,14 +131,20 @@ def spotifyToken():
 	else:
 		spotify_token_params = spotifyTokenRequest(code)
 		spotify_token_headers_dict = spotifyTokenHeaders()
-		print("params: " + str(spotify_token_params))
-		print("headers: " + str(spotify_token_headers_dict))
 		result = requests.post(kSpotifyTokenURL, data=spotify_token_params, headers=spotify_token_headers_dict).json()
-		print(result)
 
-		# Add the relevant stuff to session
+		session['spotify_access_token'] = result['access_token']
+		session['spotify_refresh_token'] = result['refresh_token']
 
 		return redirect("/")
+
+
+# Create user action
+@app.route('/createUser')
+def createUser():
+	createUserFromSession(session)
+	return "X"
+
 
 # Start / Restart server
 @app.route(kStartEnginePath)

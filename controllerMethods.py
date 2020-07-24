@@ -40,5 +40,34 @@ def startEngine():
 
 		time.sleep(kFetchingDelay)
 
-def createUserFromStrava(result):
-	print (result.text)
+def createUserSQL(username, user_id, profile_picture, city, state, country, firstname, lastname):
+	# Crewate table if not there
+	# insert the user
+
+def writeStravaCodesSQL(user_id, strava_access_token, strava_refresh_token):
+	# create strava tokens table if not there
+
+def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token):
+	# create spotify tokens table if not there
+
+def createUserFromSession(session):
+	# user table
+	username = session['strava_athlete']['username']
+	user_id = session['strava_athlete']['id']
+	profile_picture = session['strava_athlete']['profile']
+	city = session['strava_athlete']['city']
+	state = session['strava_athlete']['state']
+	country = session['strava_athlete']['country']
+	firstname = session['strava_athlete']['firstname']
+	lastname = session['strava_athlete']['lastname']
+	createUserSQL(username, user_id, profile_picture, city, state, country, firstname, lastname)
+	
+	# strava access table
+	strava_access_token = session['strava_access_token']
+	strava_refresh_token = session['strava_refresh_token']
+	writeStravaCodesSQL(user_id, strava_access_token, strava_refresh_token)
+
+	# spotify access table
+	spotify_access_token = session['spotify_access_token']
+	spotify_refresh_token = session['spotify_refresh_token']
+	writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token):

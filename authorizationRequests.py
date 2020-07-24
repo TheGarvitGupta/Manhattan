@@ -40,6 +40,7 @@ def spotifyAuthorizeRequest():
 
 def spotifyTokenRequest(authorization_code):
 	query_prams_dict = {}
+	query_prams_dict['client_id'] = kSpotifyClientID
 	query_prams_dict['grant_type'] = "authorization_code"
 	query_prams_dict['code'] = authorization_code
 	query_prams_dict['redirect_uri'] = kSpotifyRedirectURI
@@ -51,5 +52,5 @@ def stravaTokenHeaders():
 def spotifyTokenHeaders():
 	headers = {}
 	# TODO:  Solve this
-	headers["Authorization"] = base64.b64encode(kSpotifyClientID + ":" + kSpotifyClientSecret, altchars=None)
+	headers["Authorization"] = "Basic " + base64.b64encode("" + kSpotifyClientID + ":" + kSpotifyClientSecret, altchars=None)
 	return headers
