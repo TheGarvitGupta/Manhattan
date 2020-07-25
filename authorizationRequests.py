@@ -51,6 +51,5 @@ def stravaTokenHeaders():
 
 def spotifyTokenHeaders():
 	headers = {}
-	# TODO:  Solve this
 	headers["Authorization"] = "Basic " + base64.b64encode("" + kSpotifyClientID + ":" + kSpotifyClientSecret, altchars=None)
 	return headers
