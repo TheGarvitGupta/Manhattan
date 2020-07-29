@@ -36,12 +36,13 @@ from flask import session
 from controllerMethods import applicationStatistics
 from controllerMethods import startEngine
 from controllerMethods import createUserFromSession
+from controllerMethods import databaseView
 
 app = Flask(__name__)
 app.secret_key = kAppSecretKey
 
-connnection = sqlite3.connect(kDatabaseName)
-cursor = connnection.cursor()
+connection = sqlite3.connect(kDatabaseName)
+cursor = connection.cursor()
 
 @app.route('/status')
 def status():
@@ -144,6 +145,12 @@ def spotifyToken():
 def createUser():
 	createUserFromSession(session)
 	return "X"
+
+
+# View database
+@app.route('/database')
+def viewDatabase():
+	return databaseView()
 
 
 # Start / Restart server

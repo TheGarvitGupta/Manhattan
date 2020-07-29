@@ -19,8 +19,8 @@ def startEngine():
 	connection = None
 	
 	try:
-		connnection = sqlite3.connect(kDatabaseName)
-		cursor = connnection.cursor()
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
 	except Error as error:
 		return "Failed starting engine. " + error
 
@@ -43,16 +43,16 @@ def startEngine():
 		time.sleep(kFetchingDelay)
 
 def createUserSQL(username, user_id, profile_picture, city, state, country, firstname, lastname):
-	# Crewate table if not there
-	# insert the user
 
+	# Connect to the database
 	try:
-		connnection = sqlite3.connect(kDatabaseName)
-		cursor = connnection.cursor()
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
 	except sqlite3.Error as error:
 		print("Error: " + error.args[0])
 		return False
 
+	# Create table (would error if already exists)
 	try:
 		create_user_table_query = "CREATE TABLE users(\
 		username varchar(400) PRIMARY KEY, \
@@ -68,6 +68,7 @@ def createUserSQL(username, user_id, profile_picture, city, state, country, firs
 	except sqlite3.Error as error:
 		print("Warning: " + error.args[0])
 
+	# Insert the record to the table
 	try:
 		cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
 			sqlite3.Binary(zlib.compress(username)), 
@@ -78,21 +79,87 @@ def createUserSQL(username, user_id, profile_picture, city, state, country, firs
 			sqlite3.Binary(zlib.compress(country)), 
 			sqlite3.Binary(zlib.compress(firstname)), 
 			sqlite3.Binary(zlib.compress(lastname))))
+		connection.commit()
 	except sqlite3.Error as error:
 		# TODO: Find out why it doesn't except when inserting primary key twice
 		print("Error: " + error.args[0])
 		return False
 
 	print("Inserted values for user " + username + " into the user table.")
+
 	return True
 
 def writeStravaCodesSQL(user_id, strava_access_token, strava_refresh_token):
-	# create strava tokens table if not there
-	return None
+
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print("Error: " + error.args[0])
+		return False
+
+	# Create table (would error if already exists)
+	try:
+		create_user_table_query = "CREATE TABLE stravaCodes(\
+		user_id varchar(400) PRIMARY KEY, \
+		access_token varchar(400), \
+		refresh_token varchar(400), \
+		date_time datetime \
+		);"
+		cursor.execute(create_user_table_query)
+	except sqlite3.Error as error:
+		print("Warning: " + error.args[0])
+
+	# Insert the record to the table
+	try:
+		cursor.execute("INSERT INTO stravaCodes VALUES (?, ?, ?, ?)", (
+			sqlite3.Binary(zlib.compress(user_id)), 
+			sqlite3.Binary(zlib.compress(strava_access_token)), 
+			sqlite3.Binary(zlib.compress(strava_refresh_token)),
+			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S')))))
+		connection.commit()
+	except sqlite3.Error as error:
+		print("Error: " + error.args[0])
+		return False
+
+	print("Inserted values for user " + user_id + " into the user table.")
 
 def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token):
-	# create spotify tokens table if not there
-	return None
+	
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print("Error: " + error.args[0])
+		return False
+
+	# Create table (would error if already exists)
+	try:
+		create_user_table_query = "CREATE TABLE spotifyCodes(\
+		user_id varchar(400) PRIMARY KEY, \
+		access_token varchar(400), \
+		refresh_token varchar(400), \
+		date_time datetime \
+		);"
+		cursor.execute(create_user_table_query)
+	except sqlite3.Error as error:
+		print("Warning: " + error.args[0])
+
+	# Insert the record to the table
+	try:
+		cursor.execute("INSERT INTO spotifyCodes VALUES (?, ?, ?, ?)", (
+			sqlite3.Binary(zlib.compress(user_id)), 
+			sqlite3.Binary(zlib.compress(spotify_access_token)), 
+			sqlite3.Binary(zlib.compress(spotify_refresh_token)),
+			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S')))))
+		connection.commit()
+	except sqlite3.Error as error:
+		print("Error: " + error.args[0])
+		return False
+
+	print("Inserted values for user " + user_id + " into the user table.")
 
 def createUserFromSession(session):
 	# user table
@@ -115,3 +182,44 @@ def createUserFromSession(session):
 	spotify_access_token = session['spotify_access_token']
 	spotify_refresh_token = session['spotify_refresh_token']
 	writeSpotifyCodesSQLResult = writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token)
+
+def databaseView():
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print("Error: " + error.args[0])
+		return "Error: " + error.args[0]
+
+	result = cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+	tableNames = []
+	for row in result:
+		tableNames.append(row[0])
+
+	htmlOutput = []
+
+	for tableName in tableNames:
+		htmlOutput.append("<h3>" + str(tableName) + "</h3>")
+		htmlOutput.append("<table>")
+		rows = cursor.execute("SELECT * FROM " + tableName)
+		names = [description[0] for description in cursor.description]
+		
+		print(names)
+		htmlOutput.append("<tr>")
+		for name in names:
+			htmlOutput.append("<th>")
+			htmlOutput.append(name)
+			htmlOutput.append("</th>")
+		htmlOutput.append("</tr>")
+
+		for row in rows: 
+			htmlOutput.append("<tr>")
+			for cell in row:
+				htmlOutput.append("<td>")
+				htmlOutput.append(zlib.decompress(cell))
+				htmlOutput.append("</td>")
+			htmlOutput.append("</tr>")
+		htmlOutput.append("</table>")
+	print ("".join(htmlOutput))
+	return "".join(htmlOutput)
