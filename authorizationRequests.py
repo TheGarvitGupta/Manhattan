@@ -38,12 +38,20 @@ def spotifyAuthorizeRequest():
 	query_prams_dict['scope'] = kSpotifyScope
 	return kSpotifyAuthorizeURL + "?" + urlencode(query_prams_dict)
 
-def spotifyTokenRequest(authorization_code):
+def spotifyTokenRequestWithAuthorizationCode(authorization_code):
 	query_prams_dict = {}
 	query_prams_dict['client_id'] = kSpotifyClientID
 	query_prams_dict['grant_type'] = "authorization_code"
 	query_prams_dict['code'] = authorization_code
 	query_prams_dict['redirect_uri'] = kSpotifyRedirectURI
+	return query_prams_dict
+
+def spotifyTokenRequestWithRefreshToken(refresh_token):
+	query_prams_dict = {}
+	# query_prams_dict['client_id'] = kSpotifyClientID
+	query_prams_dict['grant_type'] = "refresh_token"
+	query_prams_dict['refresh_token'] = refresh_token
+	# query_prams_dict['redirect_uri'] = kSpotifyRedirectURI
 	return query_prams_dict
 
 def stravaTokenHeaders():

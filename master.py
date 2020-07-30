@@ -1,4 +1,5 @@
 import requests
+import threading
 import json
 import sqlite3
 import pprint
@@ -17,8 +18,11 @@ from globalParams import kSpotifyClientID
 
 from authorizationRequests import stravaAuthorizeRequest
 from authorizationRequests import spotifyAuthorizeRequest
+
 from authorizationRequests import stravaTokenRequest
-from authorizationRequests import spotifyTokenRequest
+
+from authorizationRequests import spotifyTokenRequestWithAuthorizationCode
+from authorizationRequests import spotifyTokenRequestWithRefreshToken
 
 from authorizationRequests import stravaTokenHeaders
 from authorizationRequests import spotifyTokenHeaders
@@ -37,12 +41,17 @@ from controllerMethods import applicationStatistics
 from controllerMethods import startEngine
 from controllerMethods import createUserFromSession
 from controllerMethods import databaseView
+from controllerMethods import refreshTokensThreadFunction
 
 app = Flask(__name__)
 app.secret_key = kAppSecretKey
 
 connection = sqlite3.connect(kDatabaseName)
 cursor = connection.cursor()
+
+# Start refresh token thread
+refresh_token_thread = threading.Thread(target=refreshTokensThreadFunction, args=())
+refresh_token_thread.start()
 
 @app.route('/status')
 def status():
@@ -136,6 +145,7 @@ def spotifyToken():
 
 		session['spotify_access_token'] = result['access_token']
 		session['spotify_refresh_token'] = result['refresh_token']
+		session['spotify_access_token_validity'] = result['expires_in']
 
 		return redirect("/")
 

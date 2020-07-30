@@ -1,9 +1,23 @@
+import requests
+import threading
+import json
+import sqlite3
+import pprint
 import zlib
 import binascii
 import sqlite3
 import time
+
+from globalParams import kSpotifyTokenURL
+from globalParams import kSpotifyRedirectURI
+from globalParams import kSpotifyScope
+from globalParams import kSpotifyClientID
+
 from privateParams import kDatabaseName
 from globalParams import kFetchingDelay
+
+from authorizationRequests import spotifyTokenRequestWithRefreshToken
+from authorizationRequests import spotifyTokenHeaders
 
 def applicationStatistics():
 	stats = {}
@@ -125,7 +139,29 @@ def writeStravaCodesSQL(user_id, strava_access_token, strava_refresh_token):
 
 	print("Inserted values for user " + user_id + " into the user table.")
 
-def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token):
+def updateSpotifyCodesSQL(user_id, spotify_access_token, spotify_access_token_validity):
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print("Error: " + error.args[0])
+		return False
+
+	# Insert the record to the table
+	try:
+		cursor.execute("UPDATE spotifyCodes SET access_token = ?, access_token_validity = ? WHERE user_id = ?", (
+			sqlite3.Binary(zlib.compress(spotify_access_token)), 
+			sqlite3.Binary(zlib.compress(str(spotify_access_token_validity))),
+			sqlite3.Binary(zlib.compress(str(user_id)))))
+		connection.commit()
+	except sqlite3.Error as error:
+		print("Error: " + error.args[0])
+		return False
+
+	print("Updated values for user " + user_id + " into the user table.")
+
+def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token, spotify_access_token_validity):
 	
 	# Connect to the database
 	try:
@@ -141,7 +177,8 @@ def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token):
 		user_id varchar(400) PRIMARY KEY, \
 		access_token varchar(400), \
 		refresh_token varchar(400), \
-		date_time datetime \
+		date_time datetime, \
+		access_token_validity integer \
 		);"
 		cursor.execute(create_user_table_query)
 	except sqlite3.Error as error:
@@ -149,11 +186,12 @@ def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token):
 
 	# Insert the record to the table
 	try:
-		cursor.execute("INSERT INTO spotifyCodes VALUES (?, ?, ?, ?)", (
+		cursor.execute("INSERT INTO spotifyCodes VALUES (?, ?, ?, ?, ?)", (
 			sqlite3.Binary(zlib.compress(user_id)), 
 			sqlite3.Binary(zlib.compress(spotify_access_token)), 
 			sqlite3.Binary(zlib.compress(spotify_refresh_token)),
-			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S')))))
+			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
+			sqlite3.Binary(zlib.compress(str(spotify_access_token_validity)))))
 		connection.commit()
 	except sqlite3.Error as error:
 		print("Error: " + error.args[0])
@@ -181,7 +219,69 @@ def createUserFromSession(session):
 	# spotify access table
 	spotify_access_token = session['spotify_access_token']
 	spotify_refresh_token = session['spotify_refresh_token']
-	writeSpotifyCodesSQLResult = writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token)
+	spotify_access_token_validity = session['spotify_access_token_validity']
+	writeSpotifyCodesSQLResult = writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token, spotify_access_token_validity)
+
+def refreshSpotifyTokens():
+
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print("Error: " + error.args[0])
+		return False
+
+	# Retrieve all rows everything from spotifyCodes table
+	rows = cursor.execute("SELECT * FROM spotifyCodes")
+	names = [description[0] for description in cursor.description]
+
+	for row in rows:
+		
+		properties = {}
+		for value, column in zip(row, names):
+			properties[column] = zlib.decompress(value)
+		
+		access_token = properties['access_token']
+		refresh_token = properties['refresh_token']
+		date_time = time.strptime(properties['date_time'], '%Y-%m-%d %H:%M:%S')
+		user_id = properties['user_id']
+		access_token_validity = properties['access_token_validity']
+
+		# Add validity check here
+
+		spotify_token_params = spotifyTokenRequestWithRefreshToken(refresh_token)
+		spotify_token_headers_dict = spotifyTokenHeaders()
+		result = requests.post(kSpotifyTokenURL, data=spotify_token_params, headers=spotify_token_headers_dict).json()
+
+		spotify_access_token = result['access_token']
+		spotify_access_token_validity = result['expires_in']
+		
+		updateSpotifyCodesSQLResult = updateSpotifyCodesSQL(user_id, spotify_access_token, spotify_access_token_validity)
+
+def refreshStravaTokens():
+	print("Refreshed Strava Tokens")
+
+def refreshTokensThreadFunction():
+	
+	exception_tolerance = 10
+	
+	while(exception_tolerance > 0):
+		try:
+			if (refreshSpotifyTokens()):
+				print("refreshTokensThreadFunction(): Refreshed Spotify tokens")
+			if (refreshStravaTokens()):
+				print("refreshTokensThreadFunction(): Refreshed Strava tokens")
+		except Exception as exception:
+			print("refreshTokensThreadFunction():", exception)
+			if(exception.args[0].startswith('no such table')):
+				noop()
+			else:
+				exception_tolerance -= 1
+
+		time.sleep(10)
+
+	print("refreshTokensThreadFunction(): Shutting down")
 
 def databaseView():
 	# Connect to the database
@@ -223,3 +323,6 @@ def databaseView():
 		htmlOutput.append("</table>")
 	print ("".join(htmlOutput))
 	return "".join(htmlOutput)
+
+def noop():
+    return None
