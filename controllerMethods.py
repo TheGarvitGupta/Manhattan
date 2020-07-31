@@ -7,14 +7,15 @@ import zlib
 import binascii
 import sqlite3
 import time
+from datetime import datetime, timedelta
 
 from globalParams import kSpotifyTokenURL
-from globalParams import kSpotifyRedirectURI
-from globalParams import kSpotifyScope
-from globalParams import kSpotifyClientID
+from globalParams import kStravaTokenURL
 
 from privateParams import kDatabaseName
 from globalParams import kFetchingDelay
+
+from authorizationRequests import stravaTokenRequestWithRefreshToken
 
 from authorizationRequests import spotifyTokenRequestWithRefreshToken
 from authorizationRequests import spotifyTokenHeaders
@@ -28,7 +29,7 @@ def applicationStatistics():
 
 def startEngine():
 
-	print("Starting engine...")
+	print(log_time_string() + "Starting engine...")
 	
 	connection = None
 	
@@ -38,21 +39,21 @@ def startEngine():
 	except Error as error:
 		return "Failed starting engine. " + error
 
-	print("Engine started.")
+	print(log_time_string() + "Engine started.")
 
 	while(True):
-		print("Fetching users...")
+		print(log_time_string() + "Fetching users...")
 		USERS_TABLE_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='USERS_TABLE';"
 		cursor.execute(USERS_TABLE_query)
 		rows = cursor.fetchall()
 		if rows:
-			# for each userm fetch strava and spotify updates
+			# for each user fetch strava and spotify updates
 			# store them in database
 			# if access token error, call renewal, else die.
-			print()
+			noop()
 
 		else:
-			print("Total users:", len(rows))
+			print(log_time_string() + "Total users:", len(rows))
 
 		time.sleep(kFetchingDelay)
 
@@ -63,7 +64,7 @@ def createUserSQL(username, user_id, profile_picture, city, state, country, firs
 		connection = sqlite3.connect(kDatabaseName)
 		cursor = connection.cursor()
 	except sqlite3.Error as error:
-		print("Error: " + error.args[0])
+		print(log_time_string() + "Error: " + error.args[0])
 		return False
 
 	# Create table (would error if already exists)
@@ -80,7 +81,7 @@ def createUserSQL(username, user_id, profile_picture, city, state, country, firs
 		);"
 		cursor.execute(create_user_table_query)
 	except sqlite3.Error as error:
-		print("Warning: " + error.args[0])
+		print(log_time_string() + "Warning: " + error.args[0])
 
 	# Insert the record to the table
 	try:
@@ -95,22 +96,45 @@ def createUserSQL(username, user_id, profile_picture, city, state, country, firs
 			sqlite3.Binary(zlib.compress(lastname))))
 		connection.commit()
 	except sqlite3.Error as error:
-		# TODO: Find out why it doesn't except when inserting primary key twice
-		print("Error: " + error.args[0])
+		print(log_time_string() + "Error: " + error.args[0])
 		return False
 
-	print("Inserted values for user " + username + " into the user table.")
+	print(log_time_string() + "Inserted values for user " + username + " into the user table.")
 
 	return True
 
-def writeStravaCodesSQL(user_id, strava_access_token, strava_refresh_token):
+def updateStravaCodesSQL(user_id, strava_access_token, strava_refresh_token, strava_access_token_validity):
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print(log_time_string() + "Error: " + error.args[0])
+		return False
+
+	# Insert the record to the table
+	try:
+		cursor.execute("UPDATE stravaCodes SET access_token = ?, refresh_token = ?, last_update = ?, access_token_validity = ? WHERE user_id = ?", (
+			sqlite3.Binary(zlib.compress(strava_access_token)), 
+			sqlite3.Binary(zlib.compress(strava_refresh_token)), 
+			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
+			sqlite3.Binary(zlib.compress(str(strava_access_token_validity))),
+			sqlite3.Binary(zlib.compress(str(user_id)))))
+		connection.commit()
+	except sqlite3.Error as error:
+		print(log_time_string() + "Error: " + error.args[0])
+		return False
+
+	print(log_time_string() + "Updated values for user " + user_id + " into the stravaCodes table.")
+
+def writeStravaCodesSQL(user_id, strava_access_token, strava_refresh_token, strava_access_token_validity):
 
 	# Connect to the database
 	try:
 		connection = sqlite3.connect(kDatabaseName)
 		cursor = connection.cursor()
 	except sqlite3.Error as error:
-		print("Error: " + error.args[0])
+		print(log_time_string() + "Error: " + error.args[0])
 		return False
 
 	# Create table (would error if already exists)
@@ -119,25 +143,27 @@ def writeStravaCodesSQL(user_id, strava_access_token, strava_refresh_token):
 		user_id varchar(400) PRIMARY KEY, \
 		access_token varchar(400), \
 		refresh_token varchar(400), \
-		date_time datetime \
+		last_update datetime, \
+		access_token_validity integer \
 		);"
 		cursor.execute(create_user_table_query)
 	except sqlite3.Error as error:
-		print("Warning: " + error.args[0])
+		print(log_time_string() + "Warning: " + error.args[0])
 
 	# Insert the record to the table
 	try:
-		cursor.execute("INSERT INTO stravaCodes VALUES (?, ?, ?, ?)", (
+		cursor.execute("INSERT INTO stravaCodes VALUES (?, ?, ?, ?, ?)", (
 			sqlite3.Binary(zlib.compress(user_id)), 
 			sqlite3.Binary(zlib.compress(strava_access_token)), 
 			sqlite3.Binary(zlib.compress(strava_refresh_token)),
-			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S')))))
+			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
+			sqlite3.Binary(zlib.compress(str(strava_access_token_validity)))))
 		connection.commit()
 	except sqlite3.Error as error:
-		print("Error: " + error.args[0])
+		print(log_time_string() + "Error: " + error.args[0])
 		return False
 
-	print("Inserted values for user " + user_id + " into the user table.")
+	print(log_time_string() + "Inserted values for user " + user_id + " into the stravaCodes table.")
 
 def updateSpotifyCodesSQL(user_id, spotify_access_token, spotify_access_token_validity):
 	# Connect to the database
@@ -145,21 +171,22 @@ def updateSpotifyCodesSQL(user_id, spotify_access_token, spotify_access_token_va
 		connection = sqlite3.connect(kDatabaseName)
 		cursor = connection.cursor()
 	except sqlite3.Error as error:
-		print("Error: " + error.args[0])
+		print(log_time_string() + "Error: " + error.args[0])
 		return False
 
 	# Insert the record to the table
 	try:
-		cursor.execute("UPDATE spotifyCodes SET access_token = ?, access_token_validity = ? WHERE user_id = ?", (
-			sqlite3.Binary(zlib.compress(spotify_access_token)), 
+		cursor.execute("UPDATE spotifyCodes SET access_token = ?, last_update = ?, access_token_validity = ? WHERE user_id = ?", (
+			sqlite3.Binary(zlib.compress(spotify_access_token)),
+			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
 			sqlite3.Binary(zlib.compress(str(spotify_access_token_validity))),
 			sqlite3.Binary(zlib.compress(str(user_id)))))
 		connection.commit()
 	except sqlite3.Error as error:
-		print("Error: " + error.args[0])
+		print(log_time_string() + "Error: " + error.args[0])
 		return False
 
-	print("Updated values for user " + user_id + " into the user table.")
+	print(log_time_string() + "Updated values for user " + user_id + " into the spotifyCodes table.")
 
 def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token, spotify_access_token_validity):
 	
@@ -168,7 +195,7 @@ def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token, s
 		connection = sqlite3.connect(kDatabaseName)
 		cursor = connection.cursor()
 	except sqlite3.Error as error:
-		print("Error: " + error.args[0])
+		print(log_time_string() + "Error: " + error.args[0])
 		return False
 
 	# Create table (would error if already exists)
@@ -177,12 +204,12 @@ def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token, s
 		user_id varchar(400) PRIMARY KEY, \
 		access_token varchar(400), \
 		refresh_token varchar(400), \
-		date_time datetime, \
+		last_update datetime, \
 		access_token_validity integer \
 		);"
 		cursor.execute(create_user_table_query)
 	except sqlite3.Error as error:
-		print("Warning: " + error.args[0])
+		print(log_time_string() + "Warning: " + error.args[0])
 
 	# Insert the record to the table
 	try:
@@ -194,10 +221,10 @@ def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token, s
 			sqlite3.Binary(zlib.compress(str(spotify_access_token_validity)))))
 		connection.commit()
 	except sqlite3.Error as error:
-		print("Error: " + error.args[0])
+		print(log_time_string() + "Error: " + error.args[0])
 		return False
 
-	print("Inserted values for user " + user_id + " into the user table.")
+	print(log_time_string() + "Inserted values for user " + user_id + " into the spotifyCodes table.")
 
 def createUserFromSession(session):
 	# user table
@@ -214,7 +241,8 @@ def createUserFromSession(session):
 	# strava access table
 	strava_access_token = session['strava_access_token']
 	strava_refresh_token = session['strava_refresh_token']
-	writeStravaCodesSQLResult = writeStravaCodesSQL(user_id, strava_access_token, strava_refresh_token)
+	strava_access_token_validity = session['strava_access_token_validity']
+	writeStravaCodesSQLResult = writeStravaCodesSQL(user_id, strava_access_token, strava_refresh_token, strava_access_token_validity)
 
 	# spotify access table
 	spotify_access_token = session['spotify_access_token']
@@ -229,10 +257,10 @@ def refreshSpotifyTokens():
 		connection = sqlite3.connect(kDatabaseName)
 		cursor = connection.cursor()
 	except sqlite3.Error as error:
-		print("Error: " + error.args[0])
+		print(log_time_string() + "Error: " + error.args[0])
 		return False
 
-	# Retrieve all rows everything from spotifyCodes table
+	# Retrieve all rows from spotifyCodes table
 	rows = cursor.execute("SELECT * FROM spotifyCodes")
 	names = [description[0] for description in cursor.description]
 
@@ -244,36 +272,105 @@ def refreshSpotifyTokens():
 		
 		access_token = properties['access_token']
 		refresh_token = properties['refresh_token']
-		date_time = time.strptime(properties['date_time'], '%Y-%m-%d %H:%M:%S')
+		last_update = time.strptime(properties['last_update'], '%Y-%m-%d %H:%M:%S')
 		user_id = properties['user_id']
 		access_token_validity = properties['access_token_validity']
 
 		# Add validity check here
+		needs_refresh = False
+		current_time_seconds = time.mktime(time.localtime())
+		last_token_update_time_seconds = time.mktime(last_update)
+		if (current_time_seconds > last_token_update_time_seconds + int(access_token_validity)):
+			needs_refresh = True
 
-		spotify_token_params = spotifyTokenRequestWithRefreshToken(refresh_token)
-		spotify_token_headers_dict = spotifyTokenHeaders()
-		result = requests.post(kSpotifyTokenURL, data=spotify_token_params, headers=spotify_token_headers_dict).json()
+		# Refresh tokens conditionally
+		if (needs_refresh):
+			spotify_token_params = spotifyTokenRequestWithRefreshToken(refresh_token)
+			spotify_token_headers_dict = spotifyTokenHeaders()
+			result = requests.post(kSpotifyTokenURL, data=spotify_token_params, headers=spotify_token_headers_dict).json()
 
-		spotify_access_token = result['access_token']
-		spotify_access_token_validity = result['expires_in']
-		
-		updateSpotifyCodesSQLResult = updateSpotifyCodesSQL(user_id, spotify_access_token, spotify_access_token_validity)
+			spotify_access_token = result['access_token']
+			spotify_access_token_validity = result['expires_in']
+	
+			updateSpotifyCodesSQLResult = updateSpotifyCodesSQL(user_id, spotify_access_token, spotify_access_token_validity)
+		else:
+			# print(log_time_string() + "Spotify tokens for user_id " + user_id + " are valid, skipping refresh.")
+			noop()
+
+	return True
 
 def refreshStravaTokens():
-	print("Refreshed Strava Tokens")
+
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print(log_time_string() + "Error: " + error.args[0])
+		return False
+
+	# Retrieve all rows from stravaCodes table
+	rows = cursor.execute("SELECT * FROM stravaCodes")
+	names = [description[0] for description in cursor.description]
+
+	for row in rows:
+		
+		properties = {}
+		for value, column in zip(row, names):
+			properties[column] = zlib.decompress(value)
+		
+		access_token = properties['access_token']
+		refresh_token = properties['refresh_token']
+		last_update = time.strptime(properties['last_update'], '%Y-%m-%d %H:%M:%S')
+		user_id = properties['user_id']
+		access_token_validity = properties['access_token_validity']
+
+		# Add validity check here
+		needs_refresh = False
+		current_time_seconds = time.mktime(time.localtime())
+		last_token_update_time_seconds = time.mktime(last_update)
+		if (current_time_seconds > last_token_update_time_seconds + int(access_token_validity)):
+			needs_refresh = True
+
+		# Refresh tokens conditionally
+		if (needs_refresh):
+
+			strava_token_params = stravaTokenRequestWithRefreshToken(refresh_token)
+			result = requests.post(kStravaTokenURL, data=strava_token_params).json()
+
+			strava_access_token = result['access_token']
+			strava_refresh_token = result['refresh_token']
+			strava_access_token_validity = result['expires_in']
+			
+			updateStravaCodesSQLResult = updateStravaCodesSQL(user_id, strava_access_token, strava_refresh_token, strava_access_token_validity)
+		else:
+			# print(log_time_string() + "Strava tokens for user_id " + user_id + " are valid, skipping refresh.")
+			noop()
+
+	return True
+
 
 def refreshTokensThreadFunction():
 	
 	exception_tolerance = 10
 	
 	while(exception_tolerance > 0):
+		
+		# Refresh Spotify Tokens
 		try:
-			if (refreshSpotifyTokens()):
-				print("refreshTokensThreadFunction(): Refreshed Spotify tokens")
-			if (refreshStravaTokens()):
-				print("refreshTokensThreadFunction(): Refreshed Strava tokens")
+			refreshSpotifyTokens()
 		except Exception as exception:
-			print("refreshTokensThreadFunction():", exception)
+			print(log_time_string() + "refreshTokensThreadFunction: ", exception)
+			if(exception.args[0].startswith('no such table')):
+				noop()
+			else:
+				exception_tolerance -= 1
+
+		# Refresh Strava Tokens
+		try:
+			refreshStravaTokens()
+		except Exception as exception:
+			print(log_time_string() + "refreshTokensThreadFunction: ", exception)
 			if(exception.args[0].startswith('no such table')):
 				noop()
 			else:
@@ -281,7 +378,7 @@ def refreshTokensThreadFunction():
 
 		time.sleep(10)
 
-	print("refreshTokensThreadFunction(): Shutting down")
+	print(log_time_string() + "refreshTokensThreadFunction: Shutting down")
 
 def databaseView():
 	# Connect to the database
@@ -289,7 +386,7 @@ def databaseView():
 		connection = sqlite3.connect(kDatabaseName)
 		cursor = connection.cursor()
 	except sqlite3.Error as error:
-		print("Error: " + error.args[0])
+		print(log_time_string() + "Error: " + error.args[0])
 		return "Error: " + error.args[0]
 
 	result = cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -305,7 +402,6 @@ def databaseView():
 		rows = cursor.execute("SELECT * FROM " + tableName)
 		names = [description[0] for description in cursor.description]
 		
-		print(names)
 		htmlOutput.append("<tr>")
 		for name in names:
 			htmlOutput.append("<th>")
@@ -321,8 +417,11 @@ def databaseView():
 				htmlOutput.append("</td>")
 			htmlOutput.append("</tr>")
 		htmlOutput.append("</table>")
-	print ("".join(htmlOutput))
+
 	return "".join(htmlOutput)
 
 def noop():
     return None
+
+def log_time_string():
+	return time.strftime('Server    - - [%d/%b/%Y %H:%M:%S] ')

@@ -22,12 +22,20 @@ def stravaAuthorizeRequest():
 	query_prams_dict['scope'] = ",".join(kStravaScope)
 	return kStravaAuthorizeURL + "?" + urlencode(query_prams_dict)
 
-def stravaTokenRequest(authorization_code):
+def stravaTokenRequestWithAuthorizationCode(authorization_code):
 	query_prams_dict = {}
 	query_prams_dict['client_id'] = kStravaClientID
 	query_prams_dict['client_secret'] = kStravaClientSecret
 	query_prams_dict['code'] = authorization_code
 	query_prams_dict['grant_type'] = "authorization_code"
+	return query_prams_dict
+
+def stravaTokenRequestWithRefreshToken(refresh_token):
+	query_prams_dict = {}
+	query_prams_dict['client_id'] = kStravaClientID
+	query_prams_dict['client_secret'] = kStravaClientSecret
+	query_prams_dict['refresh_token'] = refresh_token
+	query_prams_dict['grant_type'] = "refresh_token"
 	return query_prams_dict
 
 def spotifyAuthorizeRequest():

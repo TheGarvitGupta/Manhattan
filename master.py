@@ -19,7 +19,8 @@ from globalParams import kSpotifyClientID
 from authorizationRequests import stravaAuthorizeRequest
 from authorizationRequests import spotifyAuthorizeRequest
 
-from authorizationRequests import stravaTokenRequest
+from authorizationRequests import stravaTokenRequestWithAuthorizationCode
+from authorizationRequests import stravaTokenRequestWithRefreshToken
 
 from authorizationRequests import spotifyTokenRequestWithAuthorizationCode
 from authorizationRequests import spotifyTokenRequestWithRefreshToken
@@ -112,12 +113,13 @@ def stravaToken():
 
 	else:
 		# initiate strava token exchange
-		strava_token_params = stravaTokenRequest(code)
+		strava_token_params = stravaTokenRequestWithAuthorizationCode(code)
 		result = requests.post(kStravaTokenURL, strava_token_params).json()
 
 		session['strava_access_token'] = result["access_token"]
 		session['strava_refresh_token'] = result["refresh_token"]
 		session['strava_athlete'] = result["athlete"]
+		session['strava_access_token_validity'] = result['expires_in']
 
 		return redirect("/")
 		# create account for user
@@ -139,7 +141,7 @@ def spotifyToken():
 		# redirect to home with unauthorized - no code
 		return "Error occurred: no authorization code"
 	else:
-		spotify_token_params = spotifyTokenRequest(code)
+		spotify_token_params = spotifyTokenRequestWithAuthorizationCode(code)
 		spotify_token_headers_dict = spotifyTokenHeaders()
 		result = requests.post(kSpotifyTokenURL, data=spotify_token_params, headers=spotify_token_headers_dict).json()
 
