@@ -11,14 +11,19 @@ from datetime import datetime, timedelta
 
 from globalParams import kSpotifyTokenURL
 from globalParams import kStravaTokenURL
+from globalParams import kSpotifyRecentlyPlayedURL
+from globalParams import kSpotifyFetchMinimumDelay
+from globalParams import kRefreshTokensMinimumDelay
+from globalParams import kFetchingDelay
+from globalParams import kExceptionTolerance
 
 from privateParams import kDatabaseName
-from globalParams import kFetchingDelay
 
 from authorizationRequests import stravaTokenRequestWithRefreshToken
-
 from authorizationRequests import spotifyTokenRequestWithRefreshToken
-from authorizationRequests import spotifyTokenHeaders
+from authorizationRequests import spotifyTokenHeadersBasic
+from authorizationRequests import spotifyTokenHeadersBearer
+from authorizationRequests import spotifyRecentlyPlayedRequest
 
 def applicationStatistics():
 	stats = {}
@@ -286,7 +291,7 @@ def refreshSpotifyTokens():
 		# Refresh tokens conditionally
 		if (needs_refresh):
 			spotify_token_params = spotifyTokenRequestWithRefreshToken(refresh_token)
-			spotify_token_headers_dict = spotifyTokenHeaders()
+			spotify_token_headers_dict = spotifyTokenHeadersBasic()
 			result = requests.post(kSpotifyTokenURL, data=spotify_token_params, headers=spotify_token_headers_dict).json()
 
 			spotify_access_token = result['access_token']
@@ -351,10 +356,10 @@ def refreshStravaTokens():
 
 
 def refreshTokensThreadFunction():
+
+	knownExceptions = 0
 	
-	exception_tolerance = 10
-	
-	while(exception_tolerance > 0):
+	while(knownExceptions < kExceptionTolerance):
 		
 		# Refresh Spotify Tokens
 		try:
@@ -364,7 +369,7 @@ def refreshTokensThreadFunction():
 			if(exception.args[0].startswith('no such table')):
 				noop()
 			else:
-				exception_tolerance -= 1
+				knownExceptions += 1
 
 		# Refresh Strava Tokens
 		try:
@@ -374,11 +379,106 @@ def refreshTokensThreadFunction():
 			if(exception.args[0].startswith('no such table')):
 				noop()
 			else:
-				exception_tolerance -= 1
+				knownExceptions += 1
 
-		time.sleep(10)
+		time.sleep(kRefreshTokensMinimumDelay)
 
 	print(log_time_string() + "refreshTokensThreadFunction: Shutting down")
+
+def writeSpotifyTracksSQL(user_id, track_id, track_name, album_name, album_artist, album_image, played_at):
+
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print(log_time_string() + "Error: " + error.args[0])
+		return False
+
+	# Create table (would error if already exists)
+	try:
+		create_spotify_table_query = "CREATE TABLE spotifyTracks(\
+		user_id varchar(400), \
+		track_id varchar(400), \
+		track_name varchar(400), \
+		album_name varchar(400), \
+		album_artist varchar(400), \
+		album_image varchar(400), \
+		played_at varchar(400), \
+		PRIMARY KEY (user_id, track_id, played_at) \
+		);"
+		cursor.execute(create_spotify_table_query)
+	except sqlite3.Error as error:
+		if (error.args[0].startswith("table spotifyTracks already exists")):
+			noop()
+		else:
+			print(log_time_string() + "Warning: " + error.args[0])
+
+	# Insert the record to the table
+	try:
+		cursor.execute("INSERT INTO spotifyTracks VALUES (?, ?, ?, ?, ?, ?, ?)", (
+			sqlite3.Binary(zlib.compress(user_id.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(track_id.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(track_name.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(album_name.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(album_artist.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(album_image.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(played_at.encode("utf-8")))))
+		connection.commit()
+		print(log_time_string() + "Inserted " + track_name + " for user " + user_id + " into the spotifyTracks table.")
+	except sqlite3.Error as error:
+		if (error.args[0].startswith("UNIQUE constraint failed")):
+			noop()
+		else:
+			print(log_time_string() + "Error: " + error.args[0])
+			return False
+
+def spotifyDownloadThreadFunction():
+
+	knownExceptions = 0
+
+	while(knownExceptions < kExceptionTolerance):
+
+		# Connect to the database
+		try:
+			connection = sqlite3.connect(kDatabaseName)
+			cursor = connection.cursor()
+		except sqlite3.Error as error:
+			print(log_time_string() + "Error: " + error.args[0])
+			return False
+
+		# Retrieve all rows from spotifyCodes table
+		rows = cursor.execute("SELECT * FROM spotifyCodes")
+		names = [description[0] for description in cursor.description]
+
+		for row in rows:
+			
+			properties = {}
+			for value, column in zip(row, names):
+				properties[column] = zlib.decompress(value)
+			
+			user_id = properties['user_id']
+			access_token = properties['access_token']
+
+			spotify_token_params = spotifyRecentlyPlayedRequest()
+			spotify_token_headers_dict = spotifyTokenHeadersBearer(access_token)
+
+			try:
+				result = requests.get(kSpotifyRecentlyPlayedURL, params=spotify_token_params, headers=spotify_token_headers_dict).json()
+				for item in result['items']:
+					track_id = item['track']['id']
+					track_name = item['track']['name']
+					album_name = item['track']['album']['name']
+					album_artist = item['track']['album']['artists'][0]['name']
+					album_image = item['track']['album']['images'][0]['url']
+					played_at = item['played_at']
+					writeSpotifyTracksSQL(user_id, track_id, track_name, album_name, album_artist, album_image, played_at)
+				print(log_time_string() + "Fetched recently played tracks for user " + user_id + ".")
+			except Exception as exception:
+				print(log_time_string() + "Exception: " + exception.args[0])
+				# TODO: Fix this print entire exception
+
+		time.sleep(kSpotifyFetchMinimumDelay)
 
 def databaseView():
 	# Connect to the database
@@ -396,27 +496,36 @@ def databaseView():
 
 	htmlOutput = []
 
+	htmlOutput.append('<head><meta http-equiv="refresh" content="10" ><link href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" rel="stylesheet"><script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script></head>')
+
 	for tableName in tableNames:
-		htmlOutput.append("<h3>" + str(tableName) + "</h3>")
-		htmlOutput.append("<table>")
-		rows = cursor.execute("SELECT * FROM " + tableName)
+		rows = cursor.execute("SELECT * FROM " + tableName).fetchall()
 		names = [description[0] for description in cursor.description]
+
+		htmlOutput.append("<h1 style='font-weight:700' class='mdc-list-group__subheader'>" + str(tableName) + " (" + str(len(rows)) + " rows)</h1>")
+		htmlOutput.append('<div class="mdc-data-table">')
+		htmlOutput.append('<div class="mdc-data-table__table-container">')
+		htmlOutput.append('<table class="mdc-data-table__table" aria-label="Dessert calories">')
+		htmlOutput.append("<tbody class='mdc-data-table__content'>")
 		
 		htmlOutput.append("<tr>")
 		for name in names:
-			htmlOutput.append("<th>")
+			htmlOutput.append('<th class="mdc-data-table__cell" scope="row">')
 			htmlOutput.append(name)
 			htmlOutput.append("</th>")
 		htmlOutput.append("</tr>")
 
 		for row in rows: 
-			htmlOutput.append("<tr>")
+			htmlOutput.append("<tr class='mdc-data-table__row'>")
 			for cell in row:
-				htmlOutput.append("<td>")
+				htmlOutput.append("<td class='mdc-data-table__cell'>")
 				htmlOutput.append(zlib.decompress(cell))
 				htmlOutput.append("</td>")
 			htmlOutput.append("</tr>")
+		htmlOutput.append("</tbody>")			
 		htmlOutput.append("</table>")
+		htmlOutput.append("</div>")
+		htmlOutput.append("</div>")
 
 	return "".join(htmlOutput)
 

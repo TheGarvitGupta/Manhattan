@@ -26,7 +26,7 @@ from authorizationRequests import spotifyTokenRequestWithAuthorizationCode
 from authorizationRequests import spotifyTokenRequestWithRefreshToken
 
 from authorizationRequests import stravaTokenHeaders
-from authorizationRequests import spotifyTokenHeaders
+from authorizationRequests import spotifyTokenHeadersBasic
 
 from privateParams import kAppSecretKey
 from privateParams import kDatabaseName
@@ -43,6 +43,7 @@ from controllerMethods import startEngine
 from controllerMethods import createUserFromSession
 from controllerMethods import databaseView
 from controllerMethods import refreshTokensThreadFunction
+from controllerMethods import spotifyDownloadThreadFunction
 
 app = Flask(__name__)
 app.secret_key = kAppSecretKey
@@ -53,6 +54,10 @@ cursor = connection.cursor()
 # Start refresh token thread
 refresh_token_thread = threading.Thread(target=refreshTokensThreadFunction, args=())
 refresh_token_thread.start()
+
+# Start Spotify download thread
+spotify_download_thread = threading.Thread(target=spotifyDownloadThreadFunction, args=())
+spotify_download_thread.start()
 
 @app.route('/status')
 def status():
@@ -142,7 +147,7 @@ def spotifyToken():
 		return "Error occurred: no authorization code"
 	else:
 		spotify_token_params = spotifyTokenRequestWithAuthorizationCode(code)
-		spotify_token_headers_dict = spotifyTokenHeaders()
+		spotify_token_headers_dict = spotifyTokenHeadersBasic()
 		result = requests.post(kSpotifyTokenURL, data=spotify_token_params, headers=spotify_token_headers_dict).json()
 
 		session['spotify_access_token'] = result['access_token']
@@ -158,11 +163,28 @@ def createUser():
 	createUserFromSession(session)
 	return "X"
 
-
 # View database
 @app.route('/database')
 def viewDatabase():
 	return databaseView()
+
+# # Strava Web Hook
+# @app.route('/stravaWebHook')
+# def stravaWebHook():
+# 	VERIFY_TOKEN = "STRAVA"
+
+# 	mode = request.args.get('hub.mode')
+# 	token = request.args.get('hub.verify_token')
+# 	challenge = request.args.get('hub.challenge')
+
+# 	if (mode && token):
+#     	if (mode == 'subscribe' && token == VERIFY_TOKEN):
+#     		print("Strava webhook received")
+#       		print(mode)
+#       		print(token)
+#       		print(challenge)
+#       	else:
+#       		print("respond with 403")
 
 
 # Start / Restart server

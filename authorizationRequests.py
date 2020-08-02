@@ -62,10 +62,20 @@ def spotifyTokenRequestWithRefreshToken(refresh_token):
 	# query_prams_dict['redirect_uri'] = kSpotifyRedirectURI
 	return query_prams_dict
 
+def spotifyRecentlyPlayedRequest():
+	query_prams_dict = {}
+	query_prams_dict['limit'] = "50"
+	return query_prams_dict
+
 def stravaTokenHeaders():
 	return None
 
-def spotifyTokenHeaders():
+def spotifyTokenHeadersBasic():
 	headers = {}
 	headers["Authorization"] = "Basic " + base64.b64encode("" + kSpotifyClientID + ":" + kSpotifyClientSecret, altchars=None)
+	return headers
+
+def spotifyTokenHeadersBearer(access_token):
+	headers = {}
+	headers["Authorization"] = "Bearer " + access_token
 	return headers
