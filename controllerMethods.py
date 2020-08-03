@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from globalParams import kSpotifyTokenURL
 from globalParams import kStravaTokenURL
 from globalParams import kSpotifyRecentlyPlayedURL
+from globalParams import kStravaListAthleteActivitiesURL
 from globalParams import kSpotifyFetchMinimumDelay
 from globalParams import kRefreshTokensMinimumDelay
 from globalParams import kFetchingDelay
@@ -23,7 +24,9 @@ from authorizationRequests import stravaTokenRequestWithRefreshToken
 from authorizationRequests import spotifyTokenRequestWithRefreshToken
 from authorizationRequests import spotifyTokenHeadersBasic
 from authorizationRequests import spotifyTokenHeadersBearer
+from authorizationRequests import stravaTokenHeadersBearer
 from authorizationRequests import spotifyRecentlyPlayedRequest
+from authorizationRequests import stravaListAthleteActivitiesRequest
 
 def applicationStatistics():
 	stats = {}
@@ -479,6 +482,39 @@ def spotifyDownloadThreadFunction():
 				# TODO: Fix this print entire exception
 
 		time.sleep(kSpotifyFetchMinimumDelay)
+
+def stravaDownloadThreadFunction():
+
+	# $ http GET "https://www.strava.com/api/v3/athlete/activities?before=&after=&page=&per_page=" "Authorization: Bearer [[token]]"
+
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print(log_time_string() + "Error: " + error.args[0])
+		return False
+
+	# Retrieve all rows from stravaCodes table
+	rows = cursor.execute("SELECT * FROM stravaCodes")
+	names = [description[0] for description in cursor.description]
+
+	for row in rows:
+		
+		properties = {}
+		for value, column in zip(row, names):
+			properties[column] = zlib.decompress(value)
+		
+		user_id = properties['user_id']
+		access_token = properties['access_token']
+
+		strava_request_params = stravaListAthleteActivitiesRequest()
+		strava_request_headers = stravaTokenHeadersBearer(access_token)
+		print(strava_request_params, strava_request_headers)
+
+		result = requests.get(kStravaListAthleteActivitiesURL, params=strava_request_params, headers=strava_request_headers).json()
+		print(result)
+
 
 def databaseView():
 	# Connect to the database

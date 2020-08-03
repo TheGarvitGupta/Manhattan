@@ -67,8 +67,18 @@ def spotifyRecentlyPlayedRequest():
 	query_prams_dict['limit'] = "50"
 	return query_prams_dict
 
+def stravaListAthleteActivitiesRequest():
+	query_prams_dict = {}
+	query_prams_dict['per_page'] = "200"
+	return query_prams_dict
+
 def stravaTokenHeaders():
 	return None
+
+def stravaTokenHeadersBearer(access_token):
+	headers = {}
+	headers["Authorization"] = "Bearer " + access_token
+	return headers
 
 def spotifyTokenHeadersBasic():
 	headers = {}

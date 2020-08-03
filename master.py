@@ -44,6 +44,7 @@ from controllerMethods import createUserFromSession
 from controllerMethods import databaseView
 from controllerMethods import refreshTokensThreadFunction
 from controllerMethods import spotifyDownloadThreadFunction
+from controllerMethods import stravaDownloadThreadFunction
 
 app = Flask(__name__)
 app.secret_key = kAppSecretKey
@@ -52,12 +53,16 @@ connection = sqlite3.connect(kDatabaseName)
 cursor = connection.cursor()
 
 # Start refresh token thread
-refresh_token_thread = threading.Thread(target=refreshTokensThreadFunction, args=())
-refresh_token_thread.start()
+# refresh_token_thread = threading.Thread(target=refreshTokensThreadFunction, args=())
+# refresh_token_thread.start()
 
 # Start Spotify download thread
-spotify_download_thread = threading.Thread(target=spotifyDownloadThreadFunction, args=())
-spotify_download_thread.start()
+# spotify_download_thread = threading.Thread(target=spotifyDownloadThreadFunction, args=())
+# spotify_download_thread.start()
+
+# Start Strava download thread
+strava_download_thread = threading.Thread(target=stravaDownloadThreadFunction, args=())
+strava_download_thread.start()
 
 @app.route('/status')
 def status():
