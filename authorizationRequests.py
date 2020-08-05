@@ -69,8 +69,14 @@ def spotifyRecentlyPlayedRequest():
 
 def stravaListAthleteActivitiesRequest():
 	query_prams_dict = {}
-	query_prams_dict['per_page'] = "200"
+	query_prams_dict['per_page'] = "5"
 	return query_prams_dict
+
+def stravaGetActivityRequest(activity_id):
+	query_prams_dict = {}
+	# query_prams_dict['id'] = activity_id
+	query_prams_dict['include_all_efforts'] = False
+	return query_prams_dict	
 
 def stravaTokenHeaders():
 	return None

@@ -13,8 +13,11 @@ from globalParams import kSpotifyTokenURL
 from globalParams import kStravaTokenURL
 from globalParams import kSpotifyRecentlyPlayedURL
 from globalParams import kStravaListAthleteActivitiesURL
+from globalParams import kStravaGetActivityRequestURL
 from globalParams import kSpotifyFetchMinimumDelay
+from globalParams import kStravaFetchMinimumDelay
 from globalParams import kRefreshTokensMinimumDelay
+from globalParams import kStravaDetailedActivityFetchMinimumDelay
 from globalParams import kFetchingDelay
 from globalParams import kExceptionTolerance
 
@@ -27,6 +30,7 @@ from authorizationRequests import spotifyTokenHeadersBearer
 from authorizationRequests import stravaTokenHeadersBearer
 from authorizationRequests import spotifyRecentlyPlayedRequest
 from authorizationRequests import stravaListAthleteActivitiesRequest
+from authorizationRequests import stravaGetActivityRequest
 
 def applicationStatistics():
 	stats = {}
@@ -388,6 +392,73 @@ def refreshTokensThreadFunction():
 
 	print(log_time_string() + "refreshTokensThreadFunction: Shutting down")
 
+def writeStravaActivitiesSQL(user_id, activity_id, activity_name, activity_start_date_local, activity_average_speed, activity_type):
+
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print(log_time_string() + "Error: " + error.args[0])
+		return False
+
+	# Create table (would error if already exists)
+	try:
+		create_stravaActivities_table_query = "CREATE TABLE stravaActivities(\
+		user_id varchar(400), \
+		activity_id varchar(400), \
+		activity_name varchar(400), \
+		activity_start_date_local varchar(400), \
+		activity_average_speed varchar(400), \
+		activity_type varchar(400), \
+		PRIMARY KEY (activity_id) \
+		);"
+		cursor.execute(create_stravaActivities_table_query)
+	except sqlite3.Error as error:
+		if (error.args[0].startswith("table stravaActivities already exists")):
+			noop()
+		else:
+			print(log_time_string() + "Warning: " + error.args[0])
+
+	# Insert the record to the table
+	try:
+		cursor.execute("INSERT INTO stravaActivities VALUES (?, ?, ?, ?, ?, ?)", (
+			sqlite3.Binary(zlib.compress(user_id.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(activity_id.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(activity_name.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(activity_start_date_local.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(activity_average_speed.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(activity_type.encode("utf-8")))))
+		connection.commit()
+		print(log_time_string() + "Inserted " + activity_name + " for user " + user_id + " into the stravaActivities table.")
+	except sqlite3.Error as error:
+		if (error.args[0].startswith("UNIQUE constraint failed")):
+			noop()
+		else:
+			print(log_time_string() + "Error: " + error.args[0])
+			return False
+
+def writeStravaDetailedActivitySQL(result):
+	# print(result)
+	activity_id = result['id']
+	activity_start_date_local = time.strptime(result['start_date_local'], '%Y-%m-%dT%H:%M:%SZ')
+	print(activity_start_date_local)
+	activity_start_date_local_seconds = time.mktime(activity_start_date_local)
+
+	print(time.localtime(activity_start_date_local_seconds))
+	
+	# split_speeds = []
+	# split_gap_speed = []
+	# split_heart = []
+	# split_start_date_local = []
+
+	# if ('splits_metric' in result):
+	# 	activity_splits_metrics = result['splits_metric']
+	# 	for activity_splits_metric in activity_splits_metrics:
+	# 		print(activity_splits_metric)
+
+	return None
+
 def writeSpotifyTracksSQL(user_id, track_id, track_name, album_name, album_artist, album_image, played_at):
 
 	# Connect to the database
@@ -485,7 +556,7 @@ def spotifyDownloadThreadFunction():
 
 def stravaDownloadThreadFunction():
 
-	# $ http GET "https://www.strava.com/api/v3/athlete/activities?before=&after=&page=&per_page=" "Authorization: Bearer [[token]]"
+	# time.sleep(kStravaFetchMinimumDelay)
 
 	# Connect to the database
 	try:
@@ -510,11 +581,124 @@ def stravaDownloadThreadFunction():
 
 		strava_request_params = stravaListAthleteActivitiesRequest()
 		strava_request_headers = stravaTokenHeadersBearer(access_token)
-		print(strava_request_params, strava_request_headers)
 
-		result = requests.get(kStravaListAthleteActivitiesURL, params=strava_request_params, headers=strava_request_headers).json()
-		print(result)
+		try:
+			result = requests.get(kStravaListAthleteActivitiesURL, params=strava_request_params, headers=strava_request_headers).json()
+			for activity in result:
+				activity_id = str(activity['id'])
+				activity_name = activity['name']
+				activity_start_date_local = activity['start_date_local']
+				activity_average_speed = str(activity['average_speed'])
+				activity_type = str(activity['type'])
+				writeStravaActivitiesSQL(user_id, activity_id, activity_name, activity_start_date_local, activity_average_speed, activity_type)
+			print(log_time_string() + "Fetched latest activities for user " + user_id + ".")
+		except Exception as exception:
+			print(log_time_string() + "Exception: " + exception.args[0])
+			# TODO: Fix this print entire exception
 
+		# time.sleep(kStravaFetchMinimumDelay)
+
+def stravaDetailedActivityDownloadThreadFunction():
+
+	while(True):
+	
+		# Connect to the database
+		try:
+			connection = sqlite3.connect(kDatabaseName)
+			cursor = connection.cursor()
+		except sqlite3.Error as error:
+			print(log_time_string() + "Error: " + error.args[0])
+			return False
+
+		# Retrieve all rows from stravaActivities table
+		rows = cursor.execute("SELECT * FROM stravaActivities").fetchall()
+		names = [description[0] for description in cursor.description]
+
+		for row in rows:
+			
+			properties = {}
+			for value, column in zip(row, names):
+				properties[column] = zlib.decompress(value)
+			
+			user_id = properties['user_id']
+			activity_id = properties['activity_id']
+			activity_name = properties['activity_name']
+
+			detailedActivityPresent = isDetailedActivityPresentForActivity(activity_id)
+			if (not detailedActivityPresent):
+				strava_access_token = getStravaAccessTokenForUserID(user_id)
+				strava_request_params = stravaGetActivityRequest(activity_id)
+				strava_request_headers = stravaTokenHeadersBearer(strava_access_token)
+
+				try:
+					detailed_activity_json = requests.get(kStravaGetActivityRequestURL + "/" + activity_id,
+						params=strava_request_params,
+						headers=strava_request_headers).json()
+					writeStravaDetailedActivitySQL(detailed_activity_json)
+					print(log_time_string() + "Fetched detailed latest activitiy (" + activity_name + ") for user " + user_id + ".")
+				except Exception as exception:
+					print(log_time_string() + "Exception: " + exception.args[0])
+					# TODO: Fix this print entire exception
+
+			time.sleep(kStravaDetailedActivityFetchMinimumDelay)
+		connection.close()
+
+def getStravaAccessTokenForUserID(user_id):
+
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print(log_time_string() + "Error: " + error.args[0])
+		connection.close()
+		return False
+
+	# Extract access_token for the given user_id
+	try:
+		rows = cursor.execute("SELECT * FROM stravaCodes WHERE user_id = ?", (sqlite3.Binary(zlib.compress(user_id)),)).fetchall()
+		names = [description[0] for description in cursor.description]
+
+		for row in rows:			
+			properties = {}
+			for value, column in zip(row, names):
+				properties[column] = zlib.decompress(value)
+				
+			access_token = properties['access_token']
+			return access_token
+	except Exception as exception:
+		print(log_time_string() + "Exception: " + str(exception))
+		connection.close()
+		return None
+
+def isDetailedActivityPresentForActivity(activity_id):
+
+	detailedActivityPresent = False
+
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print(log_time_string() + "Error: " + error.args[0])
+		connection.close()
+		return False
+
+	# Check if activity_id is present in stravaDetailedActivities
+
+	try:
+		detailedActivityResult = cursor.execute("SELECT * FROM stravaDetailedActivities WHERE activity_id = ?", (activity_id,)).fetchall()
+		if len(detailedActivityResult > 0):
+			detailedActivityPresent = True
+	except Exception as exception:
+		# TODO: Add known exception here
+		if(exception.args[0].startswith('no such table')):
+			noop()
+		else:
+			print(log_time_string() + "Exception: " + str(exception))
+	
+	connection.close()
+	return detailedActivityPresent
 
 def databaseView():
 	# Connect to the database
@@ -531,8 +715,8 @@ def databaseView():
 		tableNames.append(row[0])
 
 	htmlOutput = []
-
-	htmlOutput.append('<head><meta http-equiv="refresh" content="10" ><link href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" rel="stylesheet"><script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script></head>')
+	# <meta http-equiv="refresh" content="10" >
+	htmlOutput.append('<head><link href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" rel="stylesheet"><script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script></head>')
 
 	for tableName in tableNames:
 		rows = cursor.execute("SELECT * FROM " + tableName).fetchall()

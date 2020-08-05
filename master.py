@@ -45,6 +45,7 @@ from controllerMethods import databaseView
 from controllerMethods import refreshTokensThreadFunction
 from controllerMethods import spotifyDownloadThreadFunction
 from controllerMethods import stravaDownloadThreadFunction
+from controllerMethods import stravaDetailedActivityDownloadThreadFunction
 
 app = Flask(__name__)
 app.secret_key = kAppSecretKey
@@ -61,8 +62,12 @@ cursor = connection.cursor()
 # spotify_download_thread.start()
 
 # Start Strava download thread
-strava_download_thread = threading.Thread(target=stravaDownloadThreadFunction, args=())
-strava_download_thread.start()
+# strava_download_thread = threading.Thread(target=stravaDownloadThreadFunction, args=())
+# strava_download_thread.start()
+
+# Start Strava detailed activity download thread
+strava_detailed_activity_download_thread = threading.Thread(target=stravaDetailedActivityDownloadThreadFunction, args=())
+strava_detailed_activity_download_thread.start()
 
 @app.route('/status')
 def status():
