@@ -57,7 +57,7 @@ cursor = connection.cursor()
 # refresh_token_thread = threading.Thread(target=refreshTokensThreadFunction, args=())
 # refresh_token_thread.start()
 
-# Start Spotify download thread
+# # Start Spotify download thread
 # spotify_download_thread = threading.Thread(target=spotifyDownloadThreadFunction, args=())
 # spotify_download_thread.start()
 
@@ -66,8 +66,8 @@ cursor = connection.cursor()
 # strava_download_thread.start()
 
 # Start Strava detailed activity download thread
-strava_detailed_activity_download_thread = threading.Thread(target=stravaDetailedActivityDownloadThreadFunction, args=())
-strava_detailed_activity_download_thread.start()
+# strava_detailed_activity_download_thread = threading.Thread(target=stravaDetailedActivityDownloadThreadFunction, args=())
+# strava_detailed_activity_download_thread.start()
 
 @app.route('/status')
 def status():
@@ -171,12 +171,17 @@ def spotifyToken():
 @app.route('/createUser')
 def createUser():
 	createUserFromSession(session)
-	return "X"
+	return "User created"
 
 # View database
 @app.route('/database')
 def viewDatabase():
 	return databaseView()
+
+# View performance
+@app.route('/performance')
+def viewPerformance():
+	return performanceView()
 
 # # Strava Web Hook
 # @app.route('/stravaWebHook')

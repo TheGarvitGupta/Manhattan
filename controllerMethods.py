@@ -439,23 +439,87 @@ def writeStravaActivitiesSQL(user_id, activity_id, activity_name, activity_start
 			return False
 
 def writeStravaDetailedActivitySQL(result):
-	# print(result)
+
 	activity_id = result['id']
 	activity_start_date_local = time.strptime(result['start_date_local'], '%Y-%m-%dT%H:%M:%SZ')
-	print(activity_start_date_local)
 	activity_start_date_local_seconds = time.mktime(activity_start_date_local)
+	activity_type = result['type']
+	activity_average_speed = None
+	activity_distance = None
 
-	print(time.localtime(activity_start_date_local_seconds))
-	
-	# split_speeds = []
-	# split_gap_speed = []
-	# split_heart = []
-	# split_start_date_local = []
+	activity_split_speeds = []
+	activity_split_hearts = []
+	activity_split_start_dates_local = []
 
-	# if ('splits_metric' in result):
-	# 	activity_splits_metrics = result['splits_metric']
-	# 	for activity_splits_metric in activity_splits_metrics:
-	# 		print(activity_splits_metric)
+	if (((activity_type) == 'Run') or ((activity_type) == 'Walk')):
+		activity_average_speed = result['average_speed']
+		activity_distance = result['distance']
+
+	elapsed_time = 0
+	if ('splits_metric' in result):
+		activity_splits_metrics = result['splits_metric']
+		for activity_splits_metric in activity_splits_metrics:
+			activity_split_speeds.append(activity_splits_metric['average_speed'])
+			if "average_heartrate" in activity_splits_metric:
+				activity_split_hearts.append(activity_splits_metric['average_heartrate'])
+			else:
+				activity_split_hearts.append("0")
+			activity_split_start_dates_local.append(time.strftime('%Y-%m-%dT%H:%M:%SZ', time.localtime(activity_start_date_local_seconds + elapsed_time)))
+			elapsed_time += int(activity_splits_metric['elapsed_time'])
+
+	print(activity_id, time.strftime('%Y-%m-%dT%H:%M:%SZ', activity_start_date_local), activity_type, activity_average_speed, activity_distance)
+	# print(activity_split_speeds, activity_split_hearts, activity_split_start_dates_local)
+
+	activity_split_speeds_string = ",".join([str(x) for x in activity_split_speeds])
+	activity_split_hearts_string = ",".join([str(x) for x in activity_split_hearts])
+	activity_split_start_dates_local = ",".join([str(x) for x in activity_split_start_dates_local])
+	# Connect to the database
+	try:
+		connection = sqlite3.connect(kDatabaseName)
+		cursor = connection.cursor()
+	except sqlite3.Error as error:
+		print(log_time_string() + "Error: " + error.args[0])
+		return False
+
+	# Create table (would error if already exists)
+	try:
+		create_stravaDetailedActivities_table_query = "CREATE TABLE stravaDetailedActivities(\
+		activity_id varchar(400), \
+		activity_start_date_local varchar(400), \
+		activity_type varchar(400), \
+		activity_average_speed varchar(400), \
+		activity_distance varchar(400), \
+		activity_split_speeds varchar(1000), \
+		activity_split_hearts varchar(1000), \
+		activity_split_start_dates_local varchar(1000), \
+		PRIMARY KEY (activity_id) \
+		);"
+		cursor.execute(create_stravaDetailedActivities_table_query)
+	except sqlite3.Error as error:
+		if (error.args[0].startswith("table stravaDetailedActivities already exists")):
+			noop()
+		else:
+			print(log_time_string() + "Warning: " + error.args[0])
+
+	# Insert the record to the table
+	try:
+		cursor.execute("INSERT INTO stravaDetailedActivities VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
+			sqlite3.Binary(zlib.compress(str(activity_id).encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress((time.strftime('%Y-%m-%dT%H:%M:%SZ', activity_start_date_local)).encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(activity_type.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(str(activity_average_speed).encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(str(activity_distance).encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(activity_split_speeds_string.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(activity_split_hearts_string.encode("utf-8"))), 
+			sqlite3.Binary(zlib.compress(activity_split_start_dates_local.encode("utf-8")))))
+		connection.commit()
+		print(log_time_string() + "Inserted " + str(activity_id) + " into the stravaDetailedActivities table.")
+	except sqlite3.Error as error:
+		if (error.args[0].startswith("UNIQUE constraint failed")):
+			noop()
+		else:
+			print(log_time_string() + "Error: " + error.args[0])
+			return False
 
 	return None
 
@@ -549,7 +613,7 @@ def spotifyDownloadThreadFunction():
 					writeSpotifyTracksSQL(user_id, track_id, track_name, album_name, album_artist, album_image, played_at)
 				print(log_time_string() + "Fetched recently played tracks for user " + user_id + ".")
 			except Exception as exception:
-				print(log_time_string() + "Exception: " + exception.args[0])
+				print(log_time_string() + "aException: " + exception.args[0])
 				# TODO: Fix this print entire exception
 
 		time.sleep(kSpotifyFetchMinimumDelay)
@@ -593,7 +657,7 @@ def stravaDownloadThreadFunction():
 				writeStravaActivitiesSQL(user_id, activity_id, activity_name, activity_start_date_local, activity_average_speed, activity_type)
 			print(log_time_string() + "Fetched latest activities for user " + user_id + ".")
 		except Exception as exception:
-			print(log_time_string() + "Exception: " + exception.args[0])
+			print(log_time_string() + "bException: " + exception.args[0])
 			# TODO: Fix this print entire exception
 
 		# time.sleep(kStravaFetchMinimumDelay)
@@ -635,9 +699,9 @@ def stravaDetailedActivityDownloadThreadFunction():
 						params=strava_request_params,
 						headers=strava_request_headers).json()
 					writeStravaDetailedActivitySQL(detailed_activity_json)
-					print(log_time_string() + "Fetched detailed latest activitiy (" + activity_name + ") for user " + user_id + ".")
+					print(log_time_string() + "Fetched detailed latest activitiy (" + activity_name.strip() + ") for user " + user_id + ".")
 				except Exception as exception:
-					print(log_time_string() + "Exception: " + exception.args[0])
+					print(log_time_string() + "cException: " + exception.args[0])
 					# TODO: Fix this print entire exception
 
 			time.sleep(kStravaDetailedActivityFetchMinimumDelay)
@@ -667,7 +731,7 @@ def getStravaAccessTokenForUserID(user_id):
 			access_token = properties['access_token']
 			return access_token
 	except Exception as exception:
-		print(log_time_string() + "Exception: " + str(exception))
+		print(log_time_string() + "dException: " + str(exception))
 		connection.close()
 		return None
 
@@ -688,14 +752,14 @@ def isDetailedActivityPresentForActivity(activity_id):
 
 	try:
 		detailedActivityResult = cursor.execute("SELECT * FROM stravaDetailedActivities WHERE activity_id = ?", (activity_id,)).fetchall()
-		if len(detailedActivityResult > 0):
+		if detailedActivityResult:
 			detailedActivityPresent = True
 	except Exception as exception:
 		# TODO: Add known exception here
 		if(exception.args[0].startswith('no such table')):
 			noop()
 		else:
-			print(log_time_string() + "Exception: " + str(exception))
+			print(log_time_string() + "eException: " + str(exception))
 	
 	connection.close()
 	return detailedActivityPresent
