@@ -1,0 +1,87 @@
+html, body {
+	padding: 0px;
+	margin: 0px;
+}
+
+.gallery {
+	width: 1200px;
+	margin-left: auto;
+	margin-right: auto;
+	display: block;
+	overflow: auto;
+	margin-top: 50px;
+	margin-bottom: 50px;
+}
+
+.box-container {
+	float: left;
+	overflow: hidden;
+}
+
+.one-box-container {
+	width: calc(480px - 2px);
+	height: calc(360px - 2px);
+}
+
+.one-box-container .image-container {
+	height: 100%;
+	width: 100%;
+}
+
+.six-box-container {
+	width: 720px;
+	height: calc(360px - 2px);
+	margin-left: 2px;
+}
+
+.six-box-container .image-container {
+	height: calc(50% - 1px);
+	width: calc(33.33% - 1.33px);
+	float: left;
+	margin-right: 2px;
+	margin-bottom: 2px;
+}
+
+.six-box-container .image-container:nth-child(3) {
+	margin-right: 0px;
+}
+
+.six-box-container .image-container:nth-child(4) {
+	margin-bottom: 0px;
+}
+
+.six-box-container .image-container:nth-child(5) {
+	margin-bottom: 0px;
+}
+
+.six-box-container .image-container:nth-child(6) {
+	margin-right: 0px;
+}
+
+.fiv-box-container {
+	width: 1200px;
+	height: 180px;
+	margin-top: 2px;
+}
+
+.fiv-box-container .image-container {
+	height: 100%;
+	width: calc(20% - 1.6px);
+	float: left;
+	margin-right: 2px;
+}
+
+.fiv-box-container .image-container:nth-child(5) {
+	margin-right: 0px;
+}
+
+.image-container {
+	background-color: rgb(150, 150, 150);
+	overflow: hidden;
+}
+
+.image-container img {
+	object-fit: cover;
+	height: 100%;
+	width: 100%;
+}
