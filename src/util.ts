@@ -9,6 +9,10 @@ export interface Env {
   TOKEN_KEY: string;
   STRAVA_VERIFY_TOKEN?: string;
   STRAVA_POLL_MINUTES?: string;
+  // Cloudflare Email Sending. Absent until it is switched on for the domain.
+  EMAIL?: { send(message: Record<string, unknown>): Promise<unknown> };
+  // Where emails link back to; the cron has no request to read it from.
+  PUBLIC_ORIGIN?: string;
 }
 
 export interface User {

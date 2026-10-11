@@ -1,6 +1,7 @@
 // Cadence: which songs make you run faster?
 // Routes live under env.BASE_PATH (/cadence) so the app can sit on the main site.
 
+import { buildEmail, canSend, EmailUser, FROM, Kind, send, sendWeekly, Variant } from './emails';
 import { buildInsights } from './insights';
 import { SongInterval, songIntervals } from './match';
 import { accessToken, authorizeUrl, exchangeSpotifyCode, exchangeStravaCode, Provider, saveTokens, stravaDeauthorize } from './providers';
@@ -120,6 +121,7 @@ async function me(env: Env, user: User) {
     spotify: conn('spotify'),
     counts,
     since: since?.t ?? null,
+    email: { available: canSend(env), address: (user as EmailUser).email ?? null, confirmed: !!(user as EmailUser).email_confirmed_at },
   };
 }
 
@@ -273,6 +275,22 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
 
   if (path === '/webhooks/strava') return handleStravaWebhook(req, env, ctx);
 
+  // Links inside emails carry their own token, so they work without signing in.
+  if ((path === '/auth/email/confirm' || path === '/auth/email/off') && (method === 'GET' || method === 'POST')) {
+    const token = url.searchParams.get('t') ?? '';
+    const confirm = path.endsWith('confirm');
+    if (token && token !== 'preview') {
+      await env.DB.prepare(
+        confirm
+          ? `UPDATE users SET email_confirmed_at = COALESCE(email_confirmed_at, ?1) WHERE email_token = ?2`
+          : `UPDATE users SET email = NULL, email_confirmed_at = NULL, email_token = NULL WHERE email_token = ?2 AND ?1 > 0`,
+      )
+        .bind(now(), token)
+        .run();
+    }
+    return redirect(`${env.BASE_PATH}/?email=${confirm ? 'confirmed' : 'off'}`);
+  }
+
   // Anything that changes state must come from our own pages.
   if (method !== 'GET' && req.headers.get('origin') !== url.origin) return json({ error: 'bad origin' }, 403);
 
@@ -302,6 +320,29 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (path === '/api/insights') return json(await buildInsights(env, user));
   if (path === '/api/runs') return json(await listRuns(env, user));
   if (path === '/api/recent') return json(await recent(env, user));
+
+  // Previews of the emails, built from this account's own data.
+  const emailMatch = path.match(/^\/api\/emails\/(welcome|weekly)(\/html)?$/);
+  if (emailMatch && method === 'GET') {
+    const variant = url.searchParams.get('variant');
+    // Times in a preview follow the viewer's own timezone.
+    const viewer = { ...(user as EmailUser), email_tz: (user as EmailUser).email_tz ?? url.searchParams.get('tz') };
+    const email = await buildEmail(env, url.origin, viewer, emailMatch[1] as Kind, {
+      unit: url.searchParams.get('units') ?? undefined,
+      variant: variant === 'collecting' || variant === 'patterns' ? (variant as Variant) : undefined,
+    });
+    if (emailMatch[2]) {
+      // Shown in a sandboxed frame: email needs inline styles, which the app's own pages forbid.
+      return new Response(email.html, {
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+          'content-security-policy': "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'",
+        },
+      });
+    }
+    return json({ subject: email.subject, preview: email.preview, from: FROM, to: (user as EmailUser).email ?? user.name });
+  }
   const activityMatch = path.match(/^\/api\/activities\/(-?\d+)$/);
   if (activityMatch) {
     // Per-second data for one activity; runs fall back to their own copy.
@@ -325,6 +366,33 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
 
   if (path === '/auth/spotify' && method === 'GET') return authStart(req, env, 'spotify');
   if (path === '/auth/spotify/callback') return spotifyCallback(req, env, user, ctx);
+
+  if (path === '/api/email' && method === 'POST') {
+    if (!canSend(env)) return json({ error: 'Email updates are not switched on yet.' }, 503);
+    const me = user as EmailUser;
+    const body = (await req.json().catch(() => ({}))) as { email?: string; tz?: string; units?: string };
+    const address = (body.email ?? '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || address.length > 254) return json({ error: 'That email address does not look right.' }, 400);
+    if (me.welcome_sent_at && now() - me.welcome_sent_at < 600 && address !== me.email) return json({ error: 'Please wait a few minutes before changing it again.' }, 429);
+    const token = randomToken(16);
+    const changed = address !== me.email;
+    await env.DB.prepare(
+      `UPDATE users SET email = ?, email_token = ?, email_tz = ?, email_units = ?, welcome_sent_at = ?,
+         email_confirmed_at = CASE WHEN ? THEN NULL ELSE email_confirmed_at END WHERE id = ?`,
+    )
+      .bind(address, token, (body.tz ?? 'UTC').slice(0, 64), body.units === 'mi' ? 'mi' : 'km', now(), changed ? 1 : 0, user.id)
+      .run();
+    // The welcome email carries the confirm button; the roundup waits for it.
+    const fresh = { ...me, email: address, email_token: token };
+    const email = await buildEmail(env, url.origin, fresh, 'welcome');
+    await send(env, address, email, `${url.origin}${env.BASE_PATH}/auth/email/off?t=${token}`);
+    return json({ ok: true });
+  }
+
+  if (path === '/api/email' && method === 'DELETE') {
+    await env.DB.prepare(`UPDATE users SET email = NULL, email_confirmed_at = NULL, email_token = NULL WHERE id = ?`).bind(user.id).run();
+    return json({ ok: true });
+  }
 
   if (path === '/api/sync' && method === 'POST') {
     if (now() - (user.last_sync_at ?? 0) < 60) return json({ error: 'Synced a moment ago. Try again in a minute.' }, 429);
@@ -361,5 +429,6 @@ export default {
 
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(syncAll(env));
+    ctx.waitUntil(sendWeekly(env, env.PUBLIC_ORIGIN ?? 'https://www.garvitgupta.com').catch(console.error));
   },
 } satisfies ExportedHandler<Env>;

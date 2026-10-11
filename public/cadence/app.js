@@ -1,7 +1,7 @@
 import { activityChart, h, hideTip, minSec, runChart, s as svg, spectrum, stretchStats } from './charts.js';
 
 const app = document.getElementById('app');
-const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null };
+const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null, emailScenario: 'patterns' };
 
 try {
 	if (localStorage.getItem('cadence-units') === 'mi') state.units = 'mi';
@@ -41,8 +41,8 @@ const ago = (ts) => {
 
 // --- server -------------------------------------------------------------------
 
-async function api(path, method = 'GET') {
-	const res = await fetch(path, { method });
+async function api(path, method = 'GET', payload) {
+	const res = await fetch(path, payload ? { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) } : { method });
 	const body = await res.json().catch(() => ({}));
 	if (!res.ok) throw Object.assign(new Error(body.error || 'Something went wrong.'), { status: res.status });
 	return body;
@@ -104,10 +104,12 @@ function header() {
 	return h('header', { class: 'top' },
 		h('a', { class: 'brand', href: '#/' }, h('img', { src: 'icon.svg', alt: '' }), 'Cadence'),
 		me && h('div', { class: 'seg', role: 'group', 'aria-label': 'Units' }, unitButton('km'), unitButton('mi')),
+		me && me.user.is_demo && h('a', { class: 'btn small', href: '#/emails' }, 'Demo emails'),
 		me && h('details', { class: 'menu' },
 			h('summary', null, me.user.avatar ? h('img', { class: 'avatar', src: me.user.avatar, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { class: 'avatar' }), me.user.name),
 			h('div', { class: 'sheet' },
 				!me.user.is_demo && h('button', { onclick: () => act(() => api('api/sync', 'POST')) }, 'Sync now'),
+				!me.user.is_demo && h('button', { onclick: () => (location.hash = '#/emails') }, 'Emails'),
 				!me.user.is_demo && me.spotify.connected && h('button', { onclick: () => confirm('Disconnect Spotify? Songs already matched are kept.') && act(() => api('api/spotify', 'DELETE')) }, 'Disconnect Spotify'),
 				h('button', { onclick: () => act(() => api('auth/logout', 'POST')) }, me.user.is_demo ? 'Leave the demo' : 'Sign out'),
 				!me.user.is_demo && h('button', { class: 'danger', onclick: () => confirm('Delete your account and everything Cadence has stored about you? This cannot be undone.') && act(() => api('api/account', 'DELETE')) }, 'Delete my account'),
@@ -127,36 +129,71 @@ const ERRORS = {
 	failed: 'Something went wrong talking to Strava or Spotify. Please try again.',
 };
 
+/** A made-up run for the landing page: pace as a line, songs as blocks, one of them the fastest. */
+function sampleRun() {
+	const W = 640;
+	const songs = [[0, 96, 172], [100, 104, 28], [208, 88, 312], [300, 128, 258], [432, 92, 96], [528, 112, 200]]; // x, width, cover hue
+	const hot = 3;
+	const pace = [[0, 118], [40, 112], [96, 116], [150, 104], [204, 110], [250, 100], [296, 98], [330, 70], [372, 62], [410, 66], [432, 84], [480, 96], [524, 104], [580, 98], [640, 106]];
+	const el = svg('svg', { class: 'sample', viewBox: `0 0 ${W} 216`, role: 'img', 'aria-label': 'Example: your pace through a run, with the song that was playing underneath' });
+	songs.forEach(([x, w, hue], i) => {
+		el.append(
+			svg('rect', { class: i === hot ? 'band hot' : 'band', x: x + 1, y: 16, width: w - 2, height: 140, rx: 8 }),
+			svg('rect', { x: x + w / 2 - 17, y: 170, width: 34, height: 34, rx: 8, fill: `hsl(${hue} 62% 56%)` }),
+			svg('circle', { cx: x + w / 2 + 5, cy: 190, r: 7, fill: 'rgba(255,255,255,0.28)' }),
+		);
+	});
+	el.append(svg('path', { class: 'pace', d: pace.map(([x, y], i) => `${i ? 'L' : 'M'}${x} ${y}`).join('') }));
+	const [hx, hw] = songs[hot];
+	el.append(
+		svg('rect', { class: 'tag', x: hx + hw / 2 - 68, y: 24, width: 136, height: 26, rx: 13 }),
+		svg('text', { class: 'tag-text', x: hx + hw / 2, y: 41, 'text-anchor': 'middle' }, 'Fastest · 5:19 /km'),
+	);
+	return el;
+}
+
 function landing() {
 	const error = ERRORS[new URLSearchParams(location.search).get('error')];
 	if (error) history.replaceState(null, '', location.pathname);
-	const step = (n, title, text) => h('div', { class: 'card' }, h('div', { class: 'n' }, n), h('h3', null, title), h('p', null, text));
+	const logo = (name) => svg('svg', { class: `mark ${name}`, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: MARKS[name] }));
+	const step = (icon, text) => h('span', { class: 'step' }, icon, text);
 
 	return h('div', { class: 'wrap' },
 		header(),
-		h('main', { class: 'hero' },
+		h('main', { class: 'landing' },
 			error && h('div', { class: 'card note error' }, h('p', null, error)),
+			h('div', { class: 'joined' }, logo('strava'), 'Strava', h('i', null, '+'), logo('spotify'), 'Spotify'),
 			h('h1', null, 'Which songs make you run faster?'),
-			h('p', { class: 'lede' }, 'Cadence lines up your Strava runs with what you were listening to on Spotify, and shows how your pace moves with the music.'),
+			h('p', { class: 'lede' }, 'Your pace, song by song.'),
 			h('div', { class: 'actions' },
 				h('a', { class: 'btn strava', href: 'auth/strava' }, 'Connect with Strava'),
 				h('button', { class: 'btn', onclick: () => act(() => api('auth/demo', 'POST')) }, 'See the demo'),
 			),
+			h('div', { class: 'card sample-card' }, sampleRun()),
 			h('div', { class: 'steps' },
-				step('1', 'Sign in with Strava', 'Your Strava account is your Cadence account. No password to remember.'),
-				step('2', 'Connect Spotify', 'Cadence notes what you listen to from that moment on.'),
-				step('3', 'Just run', 'New runs are matched to their songs automatically.'),
+				step(logo('strava'), 'Connect Strava'),
+				h('i', { 'aria-hidden': 'true' }, '→'),
+				step(logo('spotify'), 'Connect Spotify'),
+				h('i', { 'aria-hidden': 'true' }, '→'),
+				step(h('b', { class: 'note-glyph', 'aria-hidden': 'true' }, '♪'), 'Run with music'),
 			),
-			h('p', { class: 'fine' }, 'Cadence only reads your runs and your listening history. You can delete everything at any time.'),
+			h('p', { class: 'fine' }, 'Read-only. Delete everything any time.'),
 		),
 	);
 }
 
 // --- dashboard ----------------------------------------------------------------
 
+const EMAIL_NOTES = { confirmed: ['Email confirmed.', 'Your Sunday roundup starts this week.'], off: ['Emails turned off.', 'You won’t hear from Cadence again unless you turn them back on.'] };
+
 function notices() {
 	const me = state.me;
 	const out = [];
+	const emailNote = EMAIL_NOTES[new URLSearchParams(location.search).get('email')];
+	if (emailNote) {
+		history.replaceState(null, '', location.pathname + location.hash);
+		out.push(h('div', { class: 'card note' }, h('p', null, h('strong', null, emailNote[0]), emailNote[1])));
+	}
 	if (me.user.is_demo) {
 		out.push(h('div', { class: 'card note' },
 			h('p', null, h('strong', null, 'This is simulated data.'), 'A made-up runner with six months of runs and songs, so you can see what Cadence finds.'),
@@ -656,6 +693,93 @@ async function runPage(id) {
 	runChart(box, run, fmt);
 }
 
+// --- emails ----------------------------------------------------------------------------------
+
+const EMAIL_SCENARIOS = [
+	{ id: 'welcome', kind: 'welcome', title: 'Welcome', when: 'Once, when you turn on email updates.', at: 'just now' },
+	{ id: 'collecting', kind: 'weekly', variant: 'collecting', title: 'Sunday roundup: still collecting', when: 'Sundays at 9am, until there are 5 runs with music.', at: 'Sun 9:00 AM' },
+	{ id: 'patterns', kind: 'weekly', variant: 'patterns', title: 'Sunday roundup: your patterns', when: 'Sundays at 9am, once there is enough data.', at: 'Sun 9:00 AM' },
+];
+
+const ICONS = {
+	archive: 'M3 6h18v4H3zM5 10v9h14v-9M10 14h4',
+	trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
+	reply: 'M10 7l-6 5 6 5v-3c5 0 8 1 10 4 0-6-3-10-10-10z',
+	forward: 'M14 7l6 5-6 5v-3c-5 0-8 1-10 4 0-6 3-10 10-10z',
+	flag: 'M6 21V4h11l-2 4 2 4H6',
+};
+const icon = (name) => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: ICONS[name] }));
+
+/** The sign-up card for real accounts. The demo only looks at examples. */
+function emailSettings() {
+	const { me } = state;
+	if (me.user.is_demo) return null;
+	if (!me.email.available) return h('div', { class: 'card note' }, h('p', null, h('strong', null, 'Email updates aren’t switched on yet.'), 'These are previews, built from your own data.'));
+	if (me.email.address) {
+		return h('div', { class: 'card note' },
+			h('p', null, h('strong', null, me.email.confirmed ? `Sunday emails go to ${me.email.address}` : `Check ${me.email.address} for the welcome email`), me.email.confirmed ? 'Every Sunday at 9am your time.' : 'Tap “Confirm my email” in it and the Sunday roundup starts.'),
+			h('button', { class: 'btn small', onclick: () => act(() => api('api/email', 'DELETE')) }, 'Turn off'),
+		);
+	}
+	const input = h('input', { class: 'field', type: 'email', placeholder: 'you@example.com', autocomplete: 'email', 'aria-label': 'Email address' });
+	const turnOn = () => act(() => api('api/email', 'POST', { email: input.value, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, units: state.units }));
+	return h('div', { class: 'card note' },
+		h('p', null, h('strong', null, 'Get a Sunday roundup'), 'A welcome email now, then a short summary every Sunday at 9am.'),
+		h('form', { class: 'inline', onsubmit: (e) => (e.preventDefault(), turnOn()) }, input, h('button', { class: 'btn small', type: 'submit' }, 'Turn on')),
+	);
+}
+
+function emailsPage() {
+	const { me } = state;
+	const scenario = EMAIL_SCENARIOS.find((x) => x.id === state.emailScenario) || EMAIL_SCENARIOS[2];
+	const query = `?units=${state.units}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}${scenario.variant ? `&variant=${scenario.variant}` : ''}`;
+
+	const subject = h('div', { class: 'subject' }, '…');
+	const to = h('span', null, me.user.name);
+	api(`api/emails/${scenario.kind}${query}`).then((m) => ((subject.textContent = m.subject), (to.textContent = m.to))).catch(() => (subject.textContent = 'Could not load this email.'));
+
+	const group = (...names) => h('span', { class: 'tools' }, names.map(icon));
+	const windowed = h('div', { class: 'mail' },
+		h('div', { class: 'mail-bar', 'aria-hidden': 'true' },
+			h('span', { class: 'lights' }, h('i'), h('i'), h('i')),
+			group('archive', 'trash'),
+			group('reply', 'forward'),
+			h('span', { class: 'tools right' }, icon('flag')),
+		),
+		h('div', { class: 'mail-count' }, '1 Message'),
+		h('div', { class: 'mail-head' },
+			h('img', { src: 'icon.svg', alt: '' }),
+			h('div', { class: 'who' },
+				h('b', null, 'Cadence'),
+				h('span', { class: 'address' }, 'cadence@garvitgupta.com'),
+				subject,
+				h('div', { class: 'to' }, 'To: ', to),
+			),
+			h('span', { class: 'at' }, `Inbox · ${scenario.at}`),
+		),
+		// Sandboxed: the email is plain HTML with inline styles and cannot run anything.
+		h('iframe', { class: 'mail-body', title: `${scenario.title} email`, sandbox: 'allow-popups allow-popups-to-escape-sandbox', src: `api/emails/${scenario.kind}/html${query}` }),
+	);
+
+	return h('div', { class: 'wrap' },
+		header(),
+		h('a', { class: 'back', href: '#/' }, '← Back'),
+		h('h1', { class: 'title' }, me.user.is_demo ? 'Demo emails' : 'Emails'),
+		h('p', { class: 'when' }, me.user.is_demo ? 'What Cadence sends, filled in with the demo runner’s data.' : 'What Cadence sends, filled in with your own data.'),
+		emailSettings(),
+		h('div', { class: 'mailroom' },
+			h('div', { class: 'scenarios', role: 'group', 'aria-label': 'Which email to show' },
+				EMAIL_SCENARIOS.map((x) =>
+					h('button', { class: 'scenario', 'aria-pressed': String(x.id === scenario.id), onclick: () => ((state.emailScenario = x.id), render(true)) },
+						h('b', null, x.title), h('span', null, x.when))),
+				h('p', { class: 'fine left' }, 'Sent from Cadence <cadence@garvitgupta.com>.'),
+			),
+			windowed,
+		),
+		footer(),
+	);
+}
+
 // --- routing ------------------------------------------------------------------
 
 function render(keepScroll) {
@@ -663,6 +787,7 @@ function render(keepScroll) {
 	if (!state.me) return app.replaceChildren(landing());
 	const run = location.hash.match(/^#\/run\/(\d+)$/);
 	if (run) return runPage(run[1]);
+	if (location.hash === '#/emails') return app.replaceChildren(emailsPage());
 	app.replaceChildren(dashboard());
 	if (keepScroll !== true) scrollTo(0, 0);
 }

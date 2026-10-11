@@ -99,6 +99,25 @@ app, change the route, `BASE_PATH`, the `run_worker_first` paths and the
 Later deploys are just `npm run deploy` (plus `npm run db:migrate:remote` when
 there is a new migration).
 
+## Emails
+
+Two emails, written in `src/emails.ts`, from `Cadence <cadence@garvitgupta.com>`:
+
+- **Welcome**: once, when someone turns on email updates. It carries the
+  "Confirm my email" button; nothing else is sent until they tap it.
+- **Sunday roundup**: 9am every Sunday in the reader's timezone. Their last 10
+  songs and activities while Cadence is still collecting, or the top findings
+  once there are five runs with music.
+
+Strava does not share an email address, so people enter one on the Emails
+page. The demo account's "Demo emails" button shows all three, filled in with
+the demo runner's data.
+
+Sending is off until Cloudflare Email Sending is set up: it needs the Workers
+Paid plan, Email Sending enabled for `garvitgupta.com` in the dashboard (this
+adds DNS records), and the `send_email` binding uncommented in
+`wrangler.jsonc`. Until then the Emails page shows previews only.
+
 ## Limits to know about
 
 - **Spotify** app StravaLink is in Development mode: only accounts added under

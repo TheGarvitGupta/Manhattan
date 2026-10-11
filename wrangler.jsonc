@@ -25,10 +25,15 @@
   "vars": {
     // Must match the route path and the folder name under public/.
     "BASE_PATH": "/cadence",
+    // Where links in emails point (the cron has no request to read it from).
+    "PUBLIC_ORIGIN": "https://www.garvitgupta.com",
     "STRAVA_CLIENT_ID": "38171",
     "SPOTIFY_CLIENT_ID": "8bff943da02b4f409395f371441b3990",
     // How often the cron polls Strava per user. Raise to 360 once the webhook is set up.
     "STRAVA_POLL_MINUTES": "30"
   },
+  // Email updates stay off until this is uncommented. It needs the Workers Paid
+  // plan and Email Sending enabled for garvitgupta.com in the Cloudflare dashboard.
+  // "send_email": [{ "name": "EMAIL" }],
   "observability": { "enabled": true }
 }
