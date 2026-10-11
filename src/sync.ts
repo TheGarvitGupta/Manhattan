@@ -60,26 +60,42 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
   const token = await accessToken(env, userId, 'strava', budget);
   if (!token) return;
 
-  const row = await env.DB.prepare(`SELECT last_sync_at FROM tokens WHERE user_id = ? AND provider = 'strava'`)
-    .bind(userId)
-    .first<{ last_sync_at: number | null }>();
-  // Look back a little past the last sync: activities can be uploaded late.
-  const after = row?.last_sync_at ? row.last_sync_at - 2 * DAY : now() - FIRST_SYNC_LOOKBACK;
-  const activities = await stravaActivities(token, after, budget);
+  const user = await env.DB.prepare(`SELECT created_at FROM users WHERE id = ?`).bind(userId).first<{ created_at: number }>();
+  // Runs from before someone joined have no songs to match, so they are skipped.
+  const cutoff = (user?.created_at ?? now()) - FIRST_SYNC_LOOKBACK;
+  const activities = await stravaActivities(token, budget);
   if (activities === null) {
     await markRevoked(env, userId, 'strava');
     return;
   }
 
-  const stmts = activities
-    .filter((a) => RUN_TYPES.has(a.sport_type ?? a.type) && a.distance > 0)
-    .map((a) =>
+  const stmts: D1PreparedStatement[] = [];
+  for (const a of activities) {
+    const type = a.sport_type ?? a.type;
+    const start = Math.floor(Date.parse(a.start_date) / 1000);
+    // Every activity is noted for the "recent activity" list; only runs are kept in full.
+    stmts.push(
       env.DB.prepare(
-        `INSERT INTO runs (user_id, strava_id, name, start_time, distance_m, moving_s, elapsed_s, avg_hr)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (user_id, strava_id) DO UPDATE SET name = excluded.name`,
-      ).bind(userId, a.id, a.name, Math.floor(Date.parse(a.start_date) / 1000), a.distance, a.moving_time, a.elapsed_time, a.average_heartrate ?? null),
+        `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (user_id, strava_id) DO UPDATE SET name = excluded.name, type = excluded.type, distance_m = excluded.distance_m`,
+      ).bind(userId, a.id, a.name, type, start, a.distance ?? 0),
     );
+    if (RUN_TYPES.has(type) && a.distance > 0 && start >= cutoff) {
+      stmts.push(
+        env.DB.prepare(
+          `INSERT INTO runs (user_id, strava_id, name, start_time, distance_m, moving_s, elapsed_s, avg_hr)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (user_id, strava_id) DO UPDATE SET name = excluded.name`,
+        ).bind(userId, a.id, a.name, start, a.distance, a.moving_time, a.elapsed_time, a.average_heartrate ?? null),
+      );
+    }
+  }
+  stmts.push(
+    env.DB.prepare(
+      `DELETE FROM activities WHERE user_id = ?1 AND strava_id NOT IN
+         (SELECT strava_id FROM activities WHERE user_id = ?1 ORDER BY start_time DESC LIMIT 20)`,
+    ).bind(userId),
+  );
   if (stmts.length) await env.DB.batch(stmts);
 
   const pending = await env.DB.prepare(

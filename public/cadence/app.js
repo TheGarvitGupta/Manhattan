@@ -1,7 +1,7 @@
 import { changesChart, h, hideTip, runChart } from './charts.js';
 
 const app = document.getElementById('app');
-const state = { me: null, insights: null, runs: null, units: 'km', allRuns: false };
+const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false };
 
 try {
 	if (localStorage.getItem('cadence-units') === 'mi') state.units = 'mi';
@@ -57,7 +57,7 @@ async function load() {
 		return render();
 	}
 	try {
-		[state.insights, state.runs] = await Promise.all([api('api/insights'), api('api/runs').then((r) => r.runs)]);
+		[state.insights, state.runs, state.recent] = await Promise.all([api('api/insights'), api('api/runs').then((r) => r.runs), api('api/recent')]);
 	} catch (err) {
 		return fail(err);
 	}
@@ -267,6 +267,65 @@ function runsTable(all, fmt) {
 	), all.length > runs.length && h('button', { class: 'btn more', onclick: () => ((state.allRuns = true), render(true)) }, `Show all ${all.length} runs`));
 }
 
+const RUN_TYPES = ['Run', 'TrailRun', 'VirtualRun'];
+const words = (type) => type.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+/** One timeline of the latest songs and activities fetched, to show the connections are alive. */
+function latest(fmt) {
+	const { me, recent } = state;
+	const items = [
+		...recent.songs.map((s) => ({ ...s, at: s.played_at, song: true })),
+		...recent.activities.map((a) => ({ ...a, at: a.start_time })),
+	].sort((x, y) => y.at - x.at);
+
+	const checked = [['Spotify', me.spotify], ['Strava', me.strava]]
+		.filter(([, c]) => !me.user.is_demo && c.last_sync_at)
+		.map(([name, c]) => `${name} checked ${ago(c.last_sync_at)}`)
+		.join(' · ');
+
+	const today = new Date().setHours(0, 0, 0, 0) / 1000;
+	const dayLabel = (ts) => (ts >= today ? 'Today' : ts >= today - 86400 ? 'Yesterday' : new Date(ts * 1000).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }));
+	const time = (ts) => new Date(ts * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+	const rows = [];
+	let heading = null;
+	for (const item of items) {
+		const label = dayLabel(item.at);
+		if (label !== heading) rows.push(h('li', { class: 'day' }, (heading = label)));
+		if (item.song) {
+			rows.push(h('li', { class: 'song' },
+				h('span', { class: 'at' }, time(item.at)),
+				h('i', { class: 'dot' }),
+				art(item.image, item.name, true),
+				h('div', { class: 'who' }, h('b', null, item.name), h('span', null, item.artist)),
+			));
+			continue;
+		}
+		const isRun = RUN_TYPES.includes(item.type);
+		const who = h('div', { class: 'who' },
+			h('b', null, item.name),
+			h('span', null, isRun ? `Run · ${fmt.dist(item.distance_m)}${item.run_id ? '' : ' · not tracked'}` : `${words(item.type)} · not a run, so not tracked`),
+		);
+		rows.push(h('li', { class: `act${isRun ? '' : ' off'}` },
+			h('span', { class: 'at' }, time(item.at)),
+			h('i', { class: 'dot' }),
+			item.run_id ? h('a', { href: `#/run/${item.run_id}` }, who) : who,
+		));
+	}
+
+	return h('section', null,
+		h('h2', null, 'Latest from your accounts'),
+		h('p', { class: 'sub' }, checked || 'The most recent songs and activities Cadence has picked up.'),
+		h('div', { class: 'card' },
+			h('div', { class: 'legend' },
+				h('span', null, h('i', { class: 'key round', style: { background: 'var(--spotify)' } }), 'Song played on Spotify'),
+				h('span', null, h('i', { class: 'key round', style: { background: 'var(--strava)' } }), 'Activity on Strava'),
+			),
+			rows.length ? h('ol', { class: 'timeline' }, rows) : h('p', { class: 'dim' }, 'Nothing fetched yet. Choose Sync now from the menu, or play a song and check back in a few minutes.'),
+		),
+	);
+}
+
 function dashboard() {
 	const { me, insights: ins, runs } = state;
 	const fmt = formatter();
@@ -276,7 +335,7 @@ function dashboard() {
 		page.append(h('div', { class: 'card note' }, h('p', null,
 			h('strong', null, 'Nothing to show yet.'),
 			'Cadence starts collecting when you connect. Spotify only shares your most recent songs, so earlier runs can’t be matched. Go for a run with music on and check back afterwards.')));
-		page.append(footer());
+		page.append(latest(fmt), footer());
 		return page;
 	}
 
@@ -322,7 +381,7 @@ function dashboard() {
 		h('p', { class: 'sub' }, me.user.is_demo || !me.strava.last_sync_at ? 'Open a run to see its pace song by song.' : `Open a run to see its pace song by song. Last checked Strava ${ago(me.strava.last_sync_at)}.`),
 		runsTable(runs, fmt),
 	));
-	page.append(footer());
+	page.append(latest(fmt), footer());
 	return page;
 }
 

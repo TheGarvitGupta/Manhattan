@@ -4,8 +4,8 @@ Which songs make you run faster? Cadence lines up Strava runs with Spotify
 listening history and shows how pace moves with the music.
 
 Lives at `www.garvitgupta.com/cadence` as a Cloudflare Worker routed onto the
-main site. (This repo was called Manhattan; the 2020 Flask prototype is still
-in the root as `*.py`.)
+main site. (This repo used to be called Manhattan; the 2020 Flask prototype is
+still in the root as `*.py`.)
 
 ## How it works
 

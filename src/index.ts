@@ -136,6 +136,33 @@ async function getRun(env: Env, user: User, id: number) {
   return { ...run, streams: JSON.parse(run.streams), songs: songs.results };
 }
 
+/** The latest songs and activities fetched, so it's visible that syncing works. */
+async function recent(env: Env, user: User) {
+  const songs = await env.DB.prepare(
+    `SELECT p.played_at, t.name, t.artist, t.image FROM plays p JOIN tracks t ON t.id = p.track_id
+     WHERE p.user_id = ? ORDER BY p.played_at DESC LIMIT 12`,
+  )
+    .bind(user.id)
+    .all();
+  let activities = await env.DB.prepare(
+    `SELECT a.name, a.type, a.start_time, a.distance_m,
+            (SELECT id FROM runs WHERE user_id = a.user_id AND strava_id = a.strava_id AND stream_state = 'ok') AS run_id
+     FROM activities a WHERE a.user_id = ? ORDER BY a.start_time DESC LIMIT 6`,
+  )
+    .bind(user.id)
+    .all();
+  if (!activities.results.length) {
+    // The demo account only has runs.
+    activities = await env.DB.prepare(
+      `SELECT name, 'Run' AS type, start_time, distance_m, id AS run_id FROM runs
+       WHERE user_id = ? AND stream_state = 'ok' ORDER BY start_time DESC LIMIT 6`,
+    )
+      .bind(user.id)
+      .all();
+  }
+  return { songs: songs.results, activities: activities.results };
+}
+
 async function handleStravaWebhook(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (req.method === 'GET') {
     // Subscription handshake.
@@ -159,7 +186,12 @@ async function handleStravaWebhook(req: Request, env: Env, ctx: ExecutionContext
       .first<{ id: number; last_sync_at: number | null }>();
     if (user && now() - (user.last_sync_at ?? 0) > 20) {
       if (ev.object_type === 'activity' && ev.aspect_type === 'delete') {
-        ctx.waitUntil(env.DB.prepare(`DELETE FROM runs WHERE user_id = ? AND strava_id = ?`).bind(user.id, ev.object_id).run());
+        ctx.waitUntil(
+          env.DB.batch([
+            env.DB.prepare(`DELETE FROM runs WHERE user_id = ? AND strava_id = ?`).bind(user.id, ev.object_id),
+            env.DB.prepare(`DELETE FROM activities WHERE user_id = ? AND strava_id = ?`).bind(user.id, ev.object_id),
+          ]),
+        );
       } else {
         // A new upload, an edit, or a deauthorisation: syncing handles all three.
         ctx.waitUntil(syncUser(env, user.id, { n: 20 }, { strava: true }).catch(console.error));
@@ -205,6 +237,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (path === '/api/me') return json(await me(env, user));
   if (path === '/api/insights') return json(await buildInsights(env, user));
   if (path === '/api/runs') return json(await listRuns(env, user));
+  if (path === '/api/recent') return json(await recent(env, user));
   const runMatch = path.match(/^\/api\/runs\/(\d+)$/);
   if (runMatch) {
     const run = await getRun(env, user, Number(runMatch[1]));

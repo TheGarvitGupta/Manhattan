@@ -151,8 +151,9 @@ export interface StravaActivity {
   average_heartrate?: number;
 }
 
-export async function stravaActivities(token: string, after: number, budget: Budget): Promise<StravaActivity[] | null> {
-  const res = await outbound(budget, `https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=50`, {
+/** The athlete's most recent activities of every type, newest first. */
+export async function stravaActivities(token: string, budget: Budget): Promise<StravaActivity[] | null> {
+  const res = await outbound(budget, `https://www.strava.com/api/v3/athlete/activities?per_page=30`, {
     headers: { authorization: `Bearer ${token}` },
   });
   if (res.status === 401) return null;
