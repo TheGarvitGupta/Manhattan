@@ -101,6 +101,11 @@ const art = (src, name, size) => {
 		: h('div', { class: cls, 'aria-hidden': 'true' }, (name || '?')[0]);
 };
 
+/** The name, set in a rounded face leaning forward like the beats in the mark, its tall letter in violet. */
+function wordmark() {
+	return h('span', { class: 'wordmark', 'aria-hidden': 'true' }, [...'cadence'].map((letter, i) => h('span', { class: letter === 'd' ? 'tall' : null, style: { animationDelay: `${i * 55}ms` } }, letter)));
+}
+
 function header() {
 	const me = state.me;
 	const unitButton = (u) =>
@@ -117,7 +122,7 @@ function header() {
 		}, u);
 
 	return h('header', { class: 'top' },
-		h('a', { class: 'brand', href: '#/' }, h('img', { src: 'icon.svg', alt: '' }), 'Cadence'),
+		h('a', { class: 'brand', href: '#/', 'aria-label': 'Cadence' }, h('img', { src: 'icon.svg', alt: '' }), wordmark()),
 		me && h('div', { class: 'seg', role: 'group', 'aria-label': 'Units' }, unitButton('km'), unitButton('mi')),
 		me && me.user.is_demo && h('a', { class: 'btn small', href: '#/emails' }, 'Demo emails'),
 		me && h('details', { class: 'menu' },

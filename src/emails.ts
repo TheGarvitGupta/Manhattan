@@ -93,31 +93,56 @@ const row = (image: string | null, title: string, sub: string, value: string, de
   </td>
 </tr>`;
 
+const GOLD = '#ffd24a';
+const TINT = '#f3f1fd';
+
+// Section headings carry a small gold beat in front, echoing the logo.
 const heading = (text: string) =>
-  `<p style="margin:30px 0 4px;font:600 12px/1.4 ${FONT};color:${MUTED};letter-spacing:0.06em;text-transform:uppercase;">${esc(text)}</p>`;
+  `<p style="margin:32px 0 6px;font:700 12px/1.4 ${FONT};color:${SOFT};letter-spacing:0.07em;text-transform:uppercase;"><span style="display:inline-block;width:14px;height:5px;border-radius:3px;background:${GOLD};vertical-align:middle;margin:-2px 8px 0 0;"></span>${esc(text)}</p>`;
 const table = (rows: string) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`;
 const para = (html: string) => `<p style="margin:0 0 14px;font:16px/1.55 ${FONT};color:${SOFT};">${html}</p>`;
 const button = (href: string, label: string) =>
-  `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 6px;"><tr><td style="border-radius:10px;background:${ACCENT};">
-     <a href="${esc(href)}" target="_blank" style="display:inline-block;padding:13px 22px;font:600 15px ${FONT};color:#ffffff;text-decoration:none;">${esc(label)}</a>
+  `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 6px;"><tr><td style="border-radius:999px;background:${ACCENT};">
+     <a href="${esc(href)}" target="_blank" style="display:inline-block;padding:14px 26px;font:700 15px ${FONT};color:#ffffff;text-decoration:none;">${esc(label)}</a>
    </td></tr></table>`;
 
-function shell(title: string, body: string, preview: string, footer: string, app: string): string {
+/** A row of figures in tinted tiles: [value, label] pairs. */
+const figures = (items: [string, string][]) =>
+  `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 4px;"><tr>${items
+    .map(
+      ([value, label], i) =>
+        `<td width="${Math.floor(100 / items.length)}%" style="padding-${i === 0 ? 'right' : i === items.length - 1 ? 'left' : 'left:4px;padding-right'}:4px;">
+           <div style="border-radius:14px;background:${TINT};padding:14px 8px;text-align:center;">
+             <div style="font:700 22px/1.2 ${FONT};color:${INK};letter-spacing:-0.02em;">${esc(value)}</div>
+             <div style="font:12px/1.4 ${FONT};color:${SOFT};">${esc(label)}</div>
+           </div>
+         </td>`,
+    )
+    .join('')}</tr></table>`;
+
+// Pieces of the violet band at the top of every email.
+const kicker = (text: string) => `<p style="margin:22px 0 6px;font:700 13px/1.4 ${FONT};color:${GOLD};letter-spacing:0.06em;text-transform:uppercase;">${esc(text)}</p>`;
+const headline = (text: string) => `<h1 style="margin:0;font:800 32px/1.1 ${FONT};color:#ffffff;letter-spacing:-0.025em;">${esc(text)}</h1>`;
+const lede = (html: string) => `<p style="margin:10px 0 0;font:16px/1.5 ${FONT};color:#e4dffc;">${html}</p>`;
+
+/**
+ * Every email: a violet band holding the logo and the headline, a white body,
+ * and a quiet footer, all on a pale violet page so no part of it looks empty.
+ */
+function shell(title: string, hero: string, body: string, preview: string, footer: string, app: string): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)}</title></head>
-<body style="margin:0;padding:0;background:#f4f3ef;">
+<body style="margin:0;padding:0;background:#e9e6fb;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(preview)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f3ef;"><tr><td align="center" style="padding:28px 12px;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;">
-    <tr><td style="padding:26px 30px 0;">
-      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-        <td width="28" height="28"><img src="${esc(app)}logo.png" width="28" height="28" alt="" style="display:block;border-radius:7px;border:0;"></td>
-        <td style="padding-left:9px;font:600 17px ${FONT};color:${INK};">Cadence</td>
-      </tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#e9e6fb" style="background:#e9e6fb;"><tr><td align="center" style="padding:26px 12px 8px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;border-radius:22px;overflow:hidden;background:#ffffff;">
+    <tr><td bgcolor="${ACCENT}" style="padding:26px 30px 32px;border-radius:22px 22px 0 0;background:${ACCENT};background-image:url(${esc(app)}beats.png),linear-gradient(135deg,#7b5cf0,#4a36c4);background-repeat:no-repeat,no-repeat;background-position:right bottom,center;background-size:260px auto,cover;">
+      <img src="${esc(app)}wordmark-light.png" width="140" height="34" alt="Cadence" style="display:block;border:0;">
+      ${hero}
     </td></tr>
-    <tr><td style="padding:22px 30px 30px;">${body}</td></tr>
+    <tr><td style="padding:26px 30px 32px;">${body}</td></tr>
   </table>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;"><tr><td style="padding:18px 30px;font:12px/1.6 ${FONT};color:${MUTED};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;"><tr><td align="center" style="padding:20px 30px 26px;font:12px/1.7 ${FONT};color:#7a74a8;">
     ${footer}<br>Powered by Strava. Music data from Spotify.
   </td></tr></table>
 </td></tr></table>
@@ -167,9 +192,8 @@ async function welcome(env: Env, origin: string, user: EmailUser): Promise<Email
   <td style="padding:12px 0;border-top:1px solid ${LINE};font:15px/1.4 ${FONT};color:${INK};"><b style="font-weight:600;">${esc(title)}</b><br><span style="color:${SOFT};font-size:14px;">${esc(text)}</span></td>
 </tr>`;
 
+  const hero = `${kicker('Welcome')}${headline(`You're in, ${firstName(user)}.`)}${lede('Cadence lines up your Strava runs with what you were listening to on Spotify, and finds the songs you run fastest to.')}`;
   const body = `
-<h1 style="margin:0 0 12px;font:700 30px/1.15 ${FONT};color:${INK};letter-spacing:-0.02em;">You're in, ${esc(firstName(user))}.</h1>
-${para('Cadence lines up your Strava runs with what you were listening to on Spotify, and shows which songs you run fastest to.')}
 ${button(l.confirm, 'Confirm my email')}
 <p style="margin:0;font:13px/1.5 ${FONT};color:${MUTED};">One tap, so the Sunday roundup goes to the right person.</p>
 ${heading('What happens next')}
@@ -182,7 +206,7 @@ ${table(
   return {
     subject: 'Welcome to Cadence',
     preview: 'Confirm your email, then just run with music on.',
-    html: shell('Welcome to Cadence', body, 'Confirm your email, then just run with music on.', `You're getting this because you turned on email updates in Cadence. <a href="${esc(l.off)}" style="color:${MUTED};">Turn them off</a>.`, l.app),
+    html: shell('Welcome to Cadence', hero, body, 'Confirm your email, then just run with music on.', `You're getting this because you turned on email updates in Cadence. <a href="${esc(l.off)}" style="color:${MUTED};">Turn them off</a>.`, l.app),
     text: `You're in, ${firstName(user)}.\n\nConfirm your email: ${l.confirm}\n\nWhat happens next: run with music on. After ${RUNS_NEEDED} runs your fastest and slowest songs appear, and a short roundup arrives every Sunday at 9am.\n\nOpen Cadence: ${l.app}\nTurn these emails off: ${l.off}`,
   };
 }
@@ -240,15 +264,17 @@ async function weekly(env: Env, origin: string, user: EmailUser, unit: string, f
 
     // Previewing this email for an account that is already past it: show a mid-way count.
     const have = ins.totals.runs_with_music >= RUNS_NEEDED ? RUNS_NEEDED - 2 : ins.totals.runs_with_music;
-    const filled = Math.round((have / RUNS_NEEDED) * 100);
+    // One circle per run needed: gold with a tick once it's done.
+    const circles = Array.from({ length: RUNS_NEEDED }, (_, i) =>
+      i < have
+        ? `<td style="padding-right:8px;"><div style="width:34px;height:34px;border-radius:17px;background:${GOLD};color:#4a36c4;font:800 16px/34px ${FONT};text-align:center;">&#10003;</div></td>`
+        : `<td style="padding-right:8px;"><div style="width:30px;height:30px;border-radius:17px;border:2px solid #a99df0;color:#a99df0;font:700 13px/30px ${FONT};text-align:center;">${i + 1}</div></td>`,
+    ).join('');
+    const hero = `${kicker('Still collecting')}${headline(`${have} of ${RUNS_NEEDED} runs with music`)}
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0 0;"><tr>${circles}</tr></table>
+${lede(`Your fastest and slowest songs appear after ${RUNS_NEEDED}.`)}`;
     const body = `
-<h1 style="margin:0 0 10px;font:700 28px/1.2 ${FONT};color:${INK};letter-spacing:-0.02em;">Still collecting: ${have} of ${RUNS_NEEDED} runs</h1>
-${para(`${esc(weekLine)} Your fastest and slowest songs appear after ${RUNS_NEEDED} runs with music.`)}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 6px;"><tr>
-  <td style="height:8px;border-radius:4px;background:#eeede8;font-size:0;line-height:0;">
-    <div style="width:${Math.max(filled, 3)}%;height:8px;border-radius:4px;background:${ACCENT};font-size:0;line-height:0;">&nbsp;</div>
-  </td>
-</tr></table>
+${figures([[String(t.runs), t.runs === 1 ? 'run this week' : 'runs this week'], [t.runs ? u.dist(t.distance_m) : '–', 'run'], [String(t.songs), t.songs === 1 ? 'song played' : 'songs played']])}
 ${heading('Last 10 songs')}
 ${songs.length ? table(songs.map((s) => row(s.image, s.name, s.artist, when(s.played_at, user.email_tz))).join('')) : para('No songs yet. Play something on Spotify and it will show up here.')}
 ${heading('Last 10 activities')}
@@ -268,7 +294,7 @@ ${button(l.app, 'Open Cadence')}`;
     return {
       subject,
       preview: weekLine,
-      html: shell(subject, body, weekLine, footer, l.app),
+      html: shell(subject, hero, body, weekLine, footer, l.app),
       text: `${subject}\n\n${weekLine}\n\nLast songs:\n${songs.map((s) => `- ${s.name} · ${s.artist}`).join('\n')}\n\nLast activities:\n${activities.map((a) => `- ${a.name} (${kind(a.type)})`).join('\n')}\n\nOpen Cadence: ${l.app}\nTurn these emails off: ${l.off}`,
     };
   }
@@ -277,17 +303,17 @@ ${button(l.app, 'Open Cadence')}`;
   const average = ins.totals.distance_m / ins.totals.moving_s;
   const top = ins.fastest[0];
   const best = unit === 'mi' ? ins.best_mile : ins.best_km;
-  const body = `
-<p style="margin:0 0 14px;font:600 15px ${FONT};color:${ACCENT};">You run fastest to</p>
+  const hero = `${kicker('You run fastest to')}
 <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-  <td width="96" valign="top" style="padding-right:18px;">${cover(top.image, top.name, 96)}</td>
+  <td width="104" valign="middle" style="padding-right:18px;">${top.image ? `<img src="${esc(top.image)}" width="104" height="104" alt="" style="display:block;border-radius:18px;border:3px solid #ffffff;">` : cover(null, top.name, 104)}</td>
   <td valign="middle">
-    <h1 style="margin:0 0 4px;font:700 30px/1.1 ${FONT};color:${INK};letter-spacing:-0.02em;">${esc(top.name)}</h1>
-    <p style="margin:0 0 10px;font:15px ${FONT};color:${SOFT};">${esc(top.artist)}</p>
-    <p style="margin:0;font:15px/1.4 ${FONT};color:${SOFT};"><b style="font-weight:700;font-size:19px;color:${INK};">${esc(u.pace(top.speed))}</b>&nbsp; ${esc(u.gap(top.speed, average))}</p>
+    ${headline(top.name)}
+    <p style="margin:4px 0 10px;font:16px ${FONT};color:#e4dffc;">${esc(top.artist)}</p>
+    <p style="margin:0;font:15px/1.4 ${FONT};color:#e4dffc;"><b style="font-weight:800;font-size:22px;color:${GOLD};">${esc(u.pace(top.speed))}</b>&nbsp; ${esc(u.gap(top.speed, average))}</p>
   </td>
-</tr></table>
-<p style="margin:22px 0 0;font:15px/1.5 ${FONT};color:${SOFT};">${esc(weekLine)}</p>
+</tr></table>`;
+  const body = `
+${figures([[String(t.runs), t.runs === 1 ? 'run this week' : 'runs this week'], [t.runs ? u.dist(t.distance_m) : '–', 'run'], [String(t.songs), t.songs === 1 ? 'song played' : 'songs played']])}
 ${heading('Fastest songs')}
 ${table(ins.fastest.slice(0, 3).map((s) => row(s.image, s.name, s.artist, u.pace(s.speed), u.gap(s.speed, average).replace(' than your average', ''))).join(''))}
 ${heading('Most played on runs')}
@@ -303,7 +329,7 @@ ${button(l.app, 'See everything')}
   return {
     subject,
     preview: `${u.pace(top.speed)}, ${u.gap(top.speed, average)}. ${weekLine}`,
-    html: shell(subject, body, `${u.pace(top.speed)}, ${u.gap(top.speed, average)}. ${weekLine}`, footer, l.app),
+    html: shell(subject, hero, body, `${u.pace(top.speed)}, ${u.gap(top.speed, average)}. ${weekLine}`, footer, l.app),
     text: `You run fastest to ${top.name} by ${top.artist}: ${u.pace(top.speed)}, ${u.gap(top.speed, average)}.\n\n${weekLine}\n\nFastest songs:\n${ins.fastest.slice(0, 3).map((s) => `- ${s.name}: ${u.pace(s.speed)}`).join('\n')}\n\nSee everything: ${l.app}\nTurn these emails off: ${l.off}`,
   };
 }

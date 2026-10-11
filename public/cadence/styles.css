@@ -69,8 +69,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* --- header ------------------------------------------------------------- */
 
 .top { display: flex; align-items: center; gap: 12px; padding: 20px 0; }
-.brand { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 17px; letter-spacing: -0.01em; text-decoration: none; margin-right: auto; }
-.brand img { width: 24px; height: 24px; }
+/* The wordmark's rounded face. Fredoka, SIL Open Font License. */
+@font-face { font-family: Fredoka; font-weight: 600; font-display: swap; src: url(fonts/fredoka-600-latin.woff2) format("woff2"); }
+
+.brand { display: flex; align-items: center; gap: 9px; text-decoration: none; margin-right: auto; }
+.brand img { width: 30px; height: 30px; }
+.wordmark { display: inline-flex; font: 600 25px/1 Fredoka, ui-rounded, system-ui, sans-serif; letter-spacing: -0.02em; transform: skewX(-9deg); padding-bottom: 2px; }
+.wordmark span { display: inline-block; }
+.wordmark .tall { color: var(--accent); }
+/* On hover the letters bob in turn, like a row of beats. */
+.brand:hover .wordmark span { animation: bob 0.5s ease-in-out; }
+@keyframes bob { 40% { transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .brand:hover .wordmark span { animation: none; } }
 
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; background: none; padding: 5px 10px; font-size: 13px; color: var(--ink-2); }
