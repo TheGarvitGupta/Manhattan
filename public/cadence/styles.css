@@ -190,7 +190,6 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 
 .minis { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 12px; align-items: start; }
 .mini { padding: 14px 16px; }
-.mini.wide { grid-column: span 2; }
 .mini h3 { font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
 .mini ol { list-style: none; margin: 0; padding: 0; }
 .mini li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 9px; align-items: center; padding: 5px 0; }
@@ -207,9 +206,6 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .feature .who { min-width: 0; }
 .feature .who b { display: block; font-size: 20px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .feature .who span { display: block; color: var(--ink-2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chart .wk { fill: var(--pace); }
-.chart .wk.on { fill-opacity: 0.75; }
-@media (max-width: 480px) { .mini.wide { grid-column: auto; } }
 
 .btn.small { padding: 7px 13px; font-size: 14px; }
 .opened-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

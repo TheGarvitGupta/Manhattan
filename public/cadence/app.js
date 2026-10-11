@@ -1,4 +1,4 @@
-import { activityChart, h, hideTip, minSec, runChart, stretchStats, weekBars } from './charts.js';
+import { activityChart, h, hideTip, minSec, runChart, stretchStats } from './charts.js';
 
 const app = document.getElementById('app');
 const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null };
@@ -235,23 +235,6 @@ function songCards(ins, fmt) {
 		})
 		.filter((p) => p.n >= 2);
 
-	// Minutes with music for each of the last twelve weeks, Monday to Sunday.
-	const monday = new Date();
-	monday.setHours(0, 0, 0, 0);
-	monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-	const weeks = Array.from({ length: 12 }, (_, i) => {
-		const start = new Date(monday);
-		start.setDate(start.getDate() - 7 * (11 - i));
-		return { start, seconds: 0 };
-	});
-	for (const r of ins.per_run) {
-		const i = 11 - Math.floor((monday.getTime() / 1000 + 7 * 86400 - r.t) / (7 * 86400));
-		if (weeks[i]) weeks[i].seconds += r.music_s;
-	}
-	const weekBox = h('div', { class: 'chart' });
-	const weekly = weeks.some((w) => w.seconds) ? h('div', { class: 'card mini wide' }, h('h3', null, 'Music each week'), weekBox) : null;
-	if (weekly) weekBars(weekBox, weeks, duration);
-
 	const km = ins.best_km;
 	return h('div', { class: 'minis' },
 		mini('Most played', ins.most_played, { amount: (r) => r.plays, value: (r) => `${r.plays}×`, color: BLUE }),
@@ -267,7 +250,6 @@ function songCards(ins, fmt) {
 		mini('Time of day', parts, { amount: (r) => r.speed, value: (r) => fmt.pace(r.speed).split(' ')[0], range: parts.length ? span(parts.map((p) => p.speed), 0.3) : null, plain: true, color: BLUE, ends: ['slower', 'faster'] }),
 		ins.opener ? feature('Your opener', ins.opener.image, ins.opener.name, ins.opener.name, `starts ${plural(ins.opener.count, 'run')}`) : null,
 		km ? feature('Fastest kilometre', km.song && km.song.image, km.song ? km.song.name : '♪', minSec(km.seconds), `${km.song ? km.song.name : 'no music'} · ${day(km.start_time)}`, `#/run/${km.run_id}`) : null,
-		weekly,
 	);
 }
 
