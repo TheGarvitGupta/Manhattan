@@ -224,6 +224,7 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .spectrum .line { position: absolute; left: 0; right: 0; height: 2px; border-radius: 1px; background: linear-gradient(to right, var(--grid), var(--pace)); }
 .spectrum-box.heart .line { background: linear-gradient(to right, var(--grid), var(--heart)); }
 .spectrum .avg { position: absolute; top: 0; width: 1px; background: var(--axis); }
+.spectrum .tick { position: absolute; width: 2px; height: 13px; margin-left: -1px; border-radius: 1px; background: var(--ink); }
 .spectrum .avg-label, .spectrum .end { position: absolute; color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .spectrum .avg-label { transform: translateX(-50%); color: var(--ink-2); }
 .spectrum .cover { position: absolute; padding: 0; border: 0; border-radius: 9px; overflow: hidden; background: var(--wash); color: var(--muted); font-weight: 600; box-shadow: 0 0 0 2px var(--surface), 0 2px 8px rgba(0, 0, 0, 0.14); transition: transform 0.12s ease; }
