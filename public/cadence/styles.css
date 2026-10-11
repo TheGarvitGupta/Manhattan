@@ -216,9 +216,6 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .headline .proof { margin-top: 16px; color: var(--ink-2); font-size: 16px; }
 .headline .proof b { color: var(--ink); font-size: 22px; font-weight: 650; letter-spacing: -0.01em; margin-right: 6px; }
 
-.stats { display: flex; flex-wrap: wrap; gap: 14px 40px; padding: 22px 4px 0; }
-.stats b { display: block; font-size: 24px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; }
-.stats span { color: var(--ink-2); font-size: 13px; }
 
 /* --- spectrum: covers along one scale ------------------------------------------ */
 
@@ -266,7 +263,6 @@ a.fact:hover .who b { text-decoration: underline; }
 	.headline { flex-direction: column; align-items: flex-start; padding: 20px; gap: 16px; }
 	.art.lg { width: 96px; height: 96px; }
 	.status .since { margin-left: 0; flex-basis: 100%; }
-	.stats { gap: 12px 26px; }
 }
 
 .btn.small { padding: 7px 13px; font-size: 14px; }

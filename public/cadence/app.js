@@ -301,15 +301,6 @@ function story(ins, fmt) {
 			),
 		));
 	}
-	const stat = (value, label) => h('div', null, h('b', null, value), h('span', null, label));
-	out.push(h('div', { class: 'stats' },
-		stat(t.runs, 'runs'),
-		stat(`${Math.round(t.distance_m / fmt.unitMeters)} ${fmt.unit}`, 'covered'),
-		stat(`${Math.round(t.music_s / 3600)} h`, 'of music'),
-		stat(t.tracks, 'songs'),
-		stat(fmt.pace(average).split(' ')[0], `average min/${fmt.unit}`),
-	));
-
 	// 2. Pace: every ranked song on one line from easy to fast.
 	const paced = [...ins.fastest, ...ins.slowest];
 	if (paced.length >= 2) {
