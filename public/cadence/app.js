@@ -301,7 +301,7 @@ function story(ins, fmt) {
 			),
 		));
 	}
-	// 2. Pace: every ranked song on one line from easy to fast.
+	// 2. Pace: every ranked song on one line from slow to fast.
 	const paced = [...ins.fastest, ...ins.slowest];
 	if (paced.length >= 2) {
 		const box = h('div', { class: 'spectrum-box' });
@@ -309,15 +309,15 @@ function story(ins, fmt) {
 			range: span([...paced.map((r) => r.speed), average]),
 			avg: average,
 			avgLabel: `your average ${fmt.pace(average).split(' ')[0]}`,
-			left: 'easier',
+			left: 'slower',
 			right: 'faster',
 			describe: (r) => `${fmt.pace(r.speed)} · ${paceGap(r.speed, average, fmt)}`,
 		});
-		out.push(section('Fast songs, easy songs', 'Each cover sits at the pace you ran while it played.',
+		out.push(section('Fastest and slowest songs', 'Each cover sits at the pace you ran while it played.',
 			h('div', { class: 'card' }, box),
 			h('div', { class: 'pair' },
-				songList('Speed you up', 'Your quickest pace happens to these.', ins.fastest, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceGap(r.speed, average, fmt)),
-				songList('Easy-run songs', 'Your gentlest pace. Good for long, slow days.', ins.slowest, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceGap(r.speed, average, fmt)),
+				songList('Fastest', 'You run quickest to these.', ins.fastest, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceGap(r.speed, average, fmt)),
+				songList('Slowest', 'You run slowest to these.', ins.slowest, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceGap(r.speed, average, fmt)),
 			),
 		));
 	}
