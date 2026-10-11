@@ -162,6 +162,7 @@ function landing() {
 		header(),
 		h('main', { class: 'landing' },
 			error && h('div', { class: 'card note error' }, h('p', null, error)),
+			emailNotice(),
 			h('div', { class: 'joined' }, logo('strava'), 'Strava', h('i', null, '+'), logo('spotify'), 'Spotify'),
 			h('h1', null, 'Which songs make you run faster?'),
 			h('p', { class: 'lede' }, 'Your pace, song by song.'),
@@ -186,14 +187,19 @@ function landing() {
 
 const EMAIL_NOTES = { confirmed: ['Email confirmed.', 'Your Sunday roundup starts this week.'], off: ['Emails turned off.', 'You won’t hear from Cadence again unless you turn them back on.'] };
 
+/** The one-off message after following a link in an email. Works signed in or out. */
+function emailNotice() {
+	const note = EMAIL_NOTES[new URLSearchParams(location.search).get('email')];
+	if (!note) return null;
+	history.replaceState(null, '', location.pathname + location.hash);
+	return h('div', { class: 'card note' }, h('p', null, h('strong', null, note[0]), note[1]));
+}
+
 function notices() {
 	const me = state.me;
 	const out = [];
-	const emailNote = EMAIL_NOTES[new URLSearchParams(location.search).get('email')];
-	if (emailNote) {
-		history.replaceState(null, '', location.pathname + location.hash);
-		out.push(h('div', { class: 'card note' }, h('p', null, h('strong', null, emailNote[0]), emailNote[1])));
-	}
+	const emailNote = emailNotice();
+	if (emailNote) out.push(emailNote);
 	if (me.user.is_demo) {
 		out.push(h('div', { class: 'card note' },
 			h('p', null, h('strong', null, 'This is simulated data.'), 'A made-up runner with six months of runs and songs, so you can see what Cadence finds.'),
