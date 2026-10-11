@@ -144,7 +144,9 @@ function glyphTile(type: string, app: string): string {
         ? 'weight'
         : null;
   if (!key) return cover(null, kind(type), 44);
-  return `<div style="width:44px;height:44px;border-radius:9px;background:#f4f3ef;text-align:center;"><img src="${esc(app)}glyphs/${key}.png" width="22" height="22" alt="${esc(kind(type))}" style="display:inline-block;margin-top:11px;border:0;"></div>`;
+  // Each kind has its own colour: runs in Cadence violet, rides blue, weights orange.
+  const tint = { run: '#ecebfa', ride: '#e6f0fb', weight: '#fdeee7' }[key];
+  return `<div style="width:44px;height:44px;border-radius:9px;background:${tint};text-align:center;"><img src="${esc(app)}glyphs/${key}.png" width="22" height="22" alt="${esc(kind(type))}" style="display:inline-block;margin-top:11px;border:0;"></div>`;
 }
 
 const firstName = (user: User) => user.name.split(' ')[0] || 'there';

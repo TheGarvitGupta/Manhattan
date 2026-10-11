@@ -492,7 +492,7 @@ const kind = (a) => (RUN_TYPES.includes(a.type) ? 'Run' : words(a.type));
 /** A small tile with the activity's glyph (run, ride, weights), or its initial when there's no glyph. */
 function glyphTile(type) {
 	const key = glyphFor(type);
-	return h('span', { class: 'glyph-tile', 'aria-hidden': 'true' },
+	return h('span', { class: `glyph-tile${key ? ` ${key}` : ''}`, 'aria-hidden': 'true' },
 		key ? svg('svg', { class: 'glyph', viewBox: '0 0 24 24' }, svg('path', { d: GLYPHS[key] })) : words(type)[0]);
 }
 

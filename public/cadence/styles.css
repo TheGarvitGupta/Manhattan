@@ -322,6 +322,10 @@ a.fact:hover .who b { text-decoration: underline; }
 
 .glyph-tile { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 8px; background: var(--wash); color: var(--ink-2); font-size: 14px; font-weight: 600; }
 .glyph { width: 19px; height: 19px; fill: currentColor; }
+/* Each kind of activity has its own colour: runs in the app's violet, rides blue, weights orange. */
+.glyph-tile.run { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, var(--surface)); }
+.glyph-tile.ride { color: var(--power); background: color-mix(in srgb, var(--power) 13%, var(--surface)); }
+.glyph-tile.weight { color: var(--heart); background: color-mix(in srgb, var(--heart) 14%, var(--surface)); }
 .opened-head .grow { flex: 1; min-width: 0; }
 
 .btn.small { padding: 7px 13px; font-size: 14px; }
