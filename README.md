@@ -101,7 +101,7 @@ there is a new migration).
 
 ## Emails
 
-Two emails, written in `src/emails.ts`, from `Cadence <cadence@garvitgupta.com>`:
+Two emails, written in `src/emails.ts`, from `Cadence <no-reply@cadence.garvitgupta.com>`:
 
 - **Welcome**: once, when someone turns on email updates. It carries the
   "Confirm my email" button; nothing else is sent until they tap it.
@@ -113,10 +113,16 @@ Strava does not share an email address, so people enter one on the Emails
 page. The demo account's "Demo emails" button shows all three, filled in with
 the demo runner's data.
 
-Sending is off until Cloudflare Email Sending is set up: it needs the Workers
-Paid plan, Email Sending enabled for `garvitgupta.com` in the dashboard (this
-adds DNS records), and the `send_email` binding uncommented in
-`wrangler.jsonc`. Until then the Emails page shows previews only.
+Emails go out through Resend (resend.com, free at this volume). Sending is off
+until it is set up:
+
+1. In Resend, add the domain `cadence.garvitgupta.com` and add the DNS records
+   it shows to Cloudflare DNS. They sit on the `cadence` subdomain only, so the
+   iCloud mail on `garvitgupta.com` is not affected.
+2. Create a Resend API key and store it: `npx wrangler secret put RESEND_API_KEY`.
+
+Until the key exists the Emails page shows previews only. `.dev.vars` can hold
+the same key for local testing.
 
 ## Limits to know about
 

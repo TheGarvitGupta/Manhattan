@@ -11,7 +11,7 @@
 import { buildInsights } from './insights';
 import { Env, now, User } from './util';
 
-export const FROM = { email: 'cadence@garvitgupta.com', name: 'Cadence' };
+export const FROM = { email: 'no-reply@cadence.garvitgupta.com', name: 'Cadence' };
 // Runs with music before the roundup switches from "collecting" to patterns.
 const RUNS_NEEDED = 5;
 const RUN_TYPES = ['Run', 'TrailRun', 'VirtualRun'];
@@ -299,19 +299,25 @@ export function buildEmail(env: Env, origin: string, user: EmailUser, which: Kin
 
 // --- sending --------------------------------------------------------------------------------
 
-/** True when Cloudflare Email Sending is bound; until then nothing is sent. */
-export const canSend = (env: Env) => !!env.EMAIL;
+/** True once a Resend API key is set; until then nothing is sent. */
+export const canSend = (env: Env) => !!env.RESEND_API_KEY;
 
+/** Sends through Resend (resend.com), which has verified cadence.garvitgupta.com. */
 export async function send(env: Env, to: string, email: Email, unsubscribe: string): Promise<boolean> {
-  if (!env.EMAIL) return false;
-  await env.EMAIL.send({
-    from: FROM,
-    to,
-    subject: email.subject,
-    html: email.html,
-    text: email.text,
-    headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+  if (!env.RESEND_API_KEY) return false;
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      from: `${FROM.name} <${FROM.email}>`,
+      to: [to],
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+      headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+    }),
   });
+  if (!res.ok) throw new Error(`Resend refused the email (${res.status}): ${(await res.text()).slice(0, 200)}`);
   return true;
 }
 

@@ -32,8 +32,7 @@
     // How often the cron polls Strava per user. Raise to 360 once the webhook is set up.
     "STRAVA_POLL_MINUTES": "30"
   },
-  // Email updates stay off until this is uncommented. It needs the Workers Paid
-  // plan and Email Sending enabled for garvitgupta.com in the Cloudflare dashboard.
-  // "send_email": [{ "name": "EMAIL" }],
+  // Email updates stay off until the RESEND_API_KEY secret is set:
+  //   npx wrangler secret put RESEND_API_KEY
   "observability": { "enabled": true }
 }

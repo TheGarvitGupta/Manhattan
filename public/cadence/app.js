@@ -751,7 +751,7 @@ function emailsPage() {
 			h('img', { src: 'icon.svg', alt: '' }),
 			h('div', { class: 'who' },
 				h('b', null, 'Cadence'),
-				h('span', { class: 'address' }, 'cadence@garvitgupta.com'),
+				h('span', { class: 'address' }, 'no-reply@cadence.garvitgupta.com'),
 				subject,
 				h('div', { class: 'to' }, 'To: ', to),
 			),
@@ -772,7 +772,7 @@ function emailsPage() {
 				EMAIL_SCENARIOS.map((x) =>
 					h('button', { class: 'scenario', 'aria-pressed': String(x.id === scenario.id), onclick: () => ((state.emailScenario = x.id), render(true)) },
 						h('b', null, x.title), h('span', null, x.when))),
-				h('p', { class: 'fine left' }, 'Sent from Cadence <cadence@garvitgupta.com>.'),
+				h('p', { class: 'fine left' }, 'Sent from Cadence <no-reply@cadence.garvitgupta.com>.'),
 			),
 			windowed,
 		),

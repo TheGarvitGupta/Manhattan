@@ -6,3 +6,5 @@ SPOTIFY_CLIENT_SECRET=
 TOKEN_KEY=
 # Any string you choose; must match the one used when creating the Strava webhook.
 STRAVA_VERIFY_TOKEN=
+# Resend API key for sending email. Leave empty to keep sending off.
+RESEND_API_KEY=
