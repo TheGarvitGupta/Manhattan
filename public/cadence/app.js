@@ -1,4 +1,4 @@
-import { activityChart, changesChart, h, hideTip, minSec, runChart } from './charts.js';
+import { activityChart, changesChart, h, hideTip, minSec, runChart, stretchStats } from './charts.js';
 
 const app = document.getElementById('app');
 const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null };
@@ -279,11 +279,50 @@ const dayName = (ts) => {
 const kind = (a) => (RUN_TYPES.includes(a.type) ? 'Run' : words(a.type));
 
 /** An opened activity: the activity across the page, its songs under it, and its data under those. */
-// Per-song details live in the chart's tooltip rather than a second list of the songs.
+// Under the chart, each distinct song is listed once with its totals for the activity.
 function opened(act, fmt) {
 	const box = h('div', { class: 'chart' });
 	const note = h('p', { class: 'sub tally', hidden: true }, 'Speed, heart rate and the rest arrive with the next Strava check, within about 10 minutes.');
 	const music = act.songs.reduce((sum, s) => sum + (s.to - s.from), 0);
+	const isRun = RUN_TYPES.includes(act.type);
+	const table = h('div');
+
+	// One row per distinct song: every time it played is added together.
+	const fillTable = (streams) => {
+		if (!act.songs.length) return;
+		const bySong = new Map();
+		for (const song of act.songs) {
+			const key = `${song.name}|${song.artist}`;
+			let row = bySong.get(key);
+			if (!row) bySong.set(key, (row = { ...song, plays: 0, seconds: 0, distance: 0, moving: 0, hrSum: 0, hrN: 0 }));
+			const st = stretchStats(streams, song.from - act.start_time, song.to - act.start_time);
+			row.plays++;
+			row.seconds += song.to - song.from;
+			row.distance += st.distance || 0;
+			row.moving += st.moving || 0;
+			row.hrSum += st.hrSum || 0;
+			row.hrN += st.hrN || 0;
+		}
+		const rows = [...bySong.values()].sort((a, b) => b.seconds - a.seconds);
+		const dash = () => h('span', { class: 'dim' }, '–');
+		const speed = (r) => (r.moving >= 5 && r.distance > 0 ? (isRun ? fmt.pace(r.distance / r.moving) : fmt.speed(r.distance / r.moving)) : dash());
+		table.replaceChildren(h('div', { class: 'scroll' }, h('table', { class: 'table' },
+			h('thead', null, h('tr', null,
+				h('th', null, 'Song'),
+				h('th', { class: 'n' }, 'Played for'),
+				streams && h('th', { class: 'n' }, isRun ? 'Average pace' : 'Average speed'),
+				streams && h('th', { class: 'n' }, 'Average heart rate'),
+			)),
+			h('tbody', null, rows.map((r) =>
+				h('tr', null,
+					h('td', null, h('div', { class: 'song' }, art(r.image, r.name, true), h('div', null, h('b', null, r.name), ' ', h('span', null, r.artist), r.plays > 1 ? h('span', { class: 'dim' }, ` · played ${r.plays} times`) : null))),
+					h('td', { class: 'n' }, minSec(r.seconds)),
+					streams && h('td', { class: 'n' }, speed(r)),
+					streams && h('td', { class: 'n' }, r.hrN ? `${Math.round(r.hrSum / r.hrN)} bpm` : dash()),
+				),
+			)),
+		)));
+	};
 
 	const card = h('div', { class: 'card' },
 		h('div', { class: 'opened-head' },
@@ -296,13 +335,16 @@ function opened(act, fmt) {
 		box,
 		note,
 		act.songs.length ? h('p', { class: 'sub tally' }, `${plural(act.songs.length, 'song')} · music for ${duration(music)} of ${duration(act.elapsed_s)}`) : null,
+		table,
 		act.run_id ? h('a', { class: 'btn small more', href: `#/run/${act.run_id}` }, 'See pace song by song') : null,
 	);
 
 	const chart = activityChart(box, act, fmt);
+	fillTable(null);
 	api(`api/activities/${act.id}`)
 		.then(({ streams }) => {
 			chart.setStreams(streams);
+			fillTable(streams);
 			note.hidden = !!streams || !act.songs.length || state.me.user.is_demo;
 		})
 		.catch(() => {});

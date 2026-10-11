@@ -346,19 +346,34 @@ function interp(t, values, at) {
 	return values[lo] + (values[hi] - values[lo]) * (span > 0 ? (at - t[lo]) / span : 0);
 }
 
-/** Averages over one stretch of an activity, e.g. while a song played. `a` and `b` are seconds in. */
+/**
+ * Totals over one stretch of an activity, e.g. while a song played. `a` and `b`
+ * are seconds in. Sums are returned alongside the averages so that several
+ * stretches (the same song played twice) can be combined correctly.
+ */
 export function stretchStats(st, a, b) {
 	if (!st || st.t.length < 2) return {};
-	const dist = interp(st.t, st.d, b) - interp(st.t, st.d, a);
+	const distance = interp(st.t, st.d, b) - interp(st.t, st.d, a);
 	const moving = interp(st.t, st.m, b) - interp(st.t, st.m, a);
-	const mean = (arr) => {
-		if (!arr) return null;
+	const tally = (arr) => {
 		let sum = 0;
 		let n = 0;
-		for (let i = 0; i < arr.length; i++) if (arr[i] != null && st.t[i] >= a && st.t[i] <= b) (sum += arr[i]), n++;
-		return n ? sum / n : null;
+		if (arr) for (let i = 0; i < arr.length; i++) if (arr[i] != null && st.t[i] >= a && st.t[i] <= b) (sum += arr[i]), n++;
+		return { sum, n };
 	};
-	return { speed: moving >= 5 && dist > 0 ? dist / moving : null, hr: mean(st.hr), watts: mean(st.w), cadence: mean(st.c) };
+	const hr = tally(st.hr);
+	const watts = tally(st.w);
+	return {
+		distance,
+		moving,
+		hrSum: hr.sum,
+		hrN: hr.n,
+		wattsSum: watts.sum,
+		wattsN: watts.n,
+		speed: moving >= 5 && distance > 0 ? distance / moving : null,
+		hr: hr.n ? hr.sum / hr.n : null,
+		watts: watts.n ? watts.sum / watts.n : null,
+	};
 }
 
 function smooth(arr, k) {
