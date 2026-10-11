@@ -1,7 +1,7 @@
 // Cadence: which songs make you run faster?
 // Routes live under env.BASE_PATH (/cadence) so the app can sit on the main site.
 
-import { buildEmail, canSend, EmailUser, FROM, Kind, send, sendWeekly, Variant } from './emails';
+import { buildEmail, canSend, EmailUser, FROM, hasPatterns, Kind, send, sendWeekly, Variant } from './emails';
 import { buildInsights } from './insights';
 import { SongInterval, songIntervals } from './match';
 import { accessToken, authorizeUrl, exchangeSpotifyCode, exchangeStravaCode, Provider, saveTokens, stravaDeauthorize } from './providers';
@@ -326,7 +326,17 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (emailMatch && method === 'GET') {
     const variant = url.searchParams.get('variant');
     // Times in a preview follow the viewer's own timezone.
-    const viewer = { ...(user as EmailUser), email_tz: (user as EmailUser).email_tz ?? url.searchParams.get('tz') };
+    let viewer = { ...(user as EmailUser), email_tz: (user as EmailUser).email_tz ?? url.searchParams.get('tz') };
+    // An account without pace data yet can't fill the patterns email, so that
+    // preview borrows the demo runner's data and says so.
+    let example = false;
+    if (emailMatch[1] === 'weekly' && variant === 'patterns' && !(await hasPatterns(env, user))) {
+      const demo = await env.DB.prepare(`SELECT * FROM users WHERE is_demo = 1`).first<EmailUser>();
+      if (demo) {
+        viewer = { ...demo, email_tz: viewer.email_tz, email_token: null };
+        example = true;
+      }
+    }
     const email = await buildEmail(env, url.origin, viewer, emailMatch[1] as Kind, {
       unit: url.searchParams.get('units') ?? undefined,
       variant: variant === 'collecting' || variant === 'patterns' ? (variant as Variant) : undefined,
@@ -341,7 +351,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
         },
       });
     }
-    return json({ subject: email.subject, preview: email.preview, from: FROM, to: (user as EmailUser).email ?? user.name });
+    return json({ subject: email.subject, preview: email.preview, from: FROM, to: (user as EmailUser).email ?? user.name, example });
   }
   const activityMatch = path.match(/^\/api\/activities\/(-?\d+)$/);
   if (activityMatch) {

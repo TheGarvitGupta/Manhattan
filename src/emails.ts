@@ -174,8 +174,7 @@ ${table(
   step(true, 'Strava connected', 'New activities arrive on their own.') +
     step(spotify, spotify ? 'Spotify connected' : 'Connect Spotify', spotify ? 'Cadence notes each song as you finish it.' : 'Cadence can only match songs it sees from the day you connect.') +
     step(false, 'Run with music on', `After ${RUNS_NEEDED} runs, your fastest and slowest songs from Spotify will appear.`),
-)}
-${button(l.app, 'Open Cadence')}`;
+)}`;
 
   return {
     subject: 'Welcome to Cadence',
@@ -210,7 +209,9 @@ async function weekly(env: Env, origin: string, user: EmailUser, unit: string, f
   const u = units(unit);
   const ins = await buildInsights(env, user);
   const t = await week(env, user);
-  const variant: Variant = forced ?? (ins.totals.runs_with_music >= RUNS_NEEDED && ins.fastest.length ? 'patterns' : 'collecting');
+  const ready = ins.fastest.length > 0;
+  // The patterns email leads with a fastest song; without one it falls back to collecting.
+  const variant: Variant = !ready ? 'collecting' : (forced ?? (ins.totals.runs_with_music >= RUNS_NEEDED ? 'patterns' : 'collecting'));
   const footer = `You're getting this every Sunday because you turned on email updates in Cadence. <a href="${esc(l.off)}" style="color:${MUTED};">Turn them off</a>.`;
   const weekLine = `${plural(t.runs, 'run')}${t.runs ? `, ${u.dist(t.distance_m)}` : ''} and ${plural(t.songs, 'song')} this week.`;
 
@@ -302,6 +303,11 @@ ${button(l.app, 'See everything')}
     html: shell(subject, body, `${u.pace(top.speed)}, ${u.gap(top.speed, average)}. ${weekLine}`, footer),
     text: `You run fastest to ${top.name} by ${top.artist}: ${u.pace(top.speed)}, ${u.gap(top.speed, average)}.\n\n${weekLine}\n\nFastest songs:\n${ins.fastest.slice(0, 3).map((s) => `- ${s.name}: ${u.pace(s.speed)}`).join('\n')}\n\nSee everything: ${l.app}\nTurn these emails off: ${l.off}`,
   };
+}
+
+/** Does this account have enough to fill the patterns email? */
+export async function hasPatterns(env: Env, user: User): Promise<boolean> {
+  return (await buildInsights(env, user)).fastest.length > 0;
 }
 
 export function buildEmail(env: Env, origin: string, user: EmailUser, which: Kind, opts: { unit?: string; variant?: Variant } = {}): Promise<Email> {

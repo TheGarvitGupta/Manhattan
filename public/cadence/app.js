@@ -752,7 +752,8 @@ function emailsPage() {
 
 	const subject = h('div', { class: 'subject' }, '…');
 	const to = h('span', null, me.user.name);
-	api(`api/emails/${scenario.kind}${query}`).then((m) => ((subject.textContent = m.subject), (to.textContent = m.to))).catch(() => (subject.textContent = 'Could not load this email.'));
+	const example = h('p', { class: 'fine left', hidden: true }, 'Example: this one uses the demo runner’s data. Yours takes over after 5 runs with music.');
+	api(`api/emails/${scenario.kind}${query}`).then((m) => ((subject.textContent = m.subject), (to.textContent = m.to), (example.hidden = !m.example))).catch(() => (subject.textContent = 'Could not load this email.'));
 
 	const group = (...names) => h('span', { class: 'tools' }, names.map(icon));
 	const windowed = h('div', { class: 'mail' },
@@ -788,6 +789,7 @@ function emailsPage() {
 				EMAIL_SCENARIOS.map((x) =>
 					h('button', { class: 'scenario', 'aria-pressed': String(x.id === scenario.id), onclick: () => ((state.emailScenario = x.id), render(true)) },
 						h('b', null, x.title), h('span', null, x.when))),
+				example,
 				h('p', { class: 'fine left' }, 'Sent from Cadence <no-reply@cadence.garvitgupta.com>.'),
 			),
 			windowed,
