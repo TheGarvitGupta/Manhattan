@@ -431,7 +431,6 @@ function dashboard() {
 
 	page.append(h('section', null,
 		h('h2', null, 'Your songs on runs'),
-		h('p', { class: 'sub' }, 'Hover a song for its artist.'),
 		songCards(ins, fmt),
 	));
 

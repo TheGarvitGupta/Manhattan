@@ -96,7 +96,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .collecting .meter > i { border-radius: 3px; }
 
 section { margin-top: 36px; }
-section > h2 { font-size: 18px; letter-spacing: -0.01em; }
+section > h2 { font-size: 18px; letter-spacing: -0.01em; margin-bottom: 14px; }
+section > h2 + .sub { margin-top: -12px; }
 section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 
 /* --- landing ------------------------------------------------------------- */
