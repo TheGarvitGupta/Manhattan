@@ -189,6 +189,7 @@ function mini(title, rows, o) {
 	const label = o.name || ((r) => r.name);
 	return h('div', { class: 'card mini' },
 		h('h3', null, title),
+		o.note ? h('p', { class: 'what' }, o.note) : null,
 		h('ol', { class: o.plain ? 'plain' : null }, rows.map((r) => {
 			const f = hi > lo ? Math.min(1, Math.max(0, (o.amount(r) - lo) / (hi - lo))) : 1;
 			const mark = h('i', { style: o.range ? { left: `${5 + f * 90}%`, background: o.color } : { width: `${Math.max(2, f * 100)}%`, background: o.color } });
@@ -204,9 +205,15 @@ function mini(title, rows, o) {
 }
 
 /** One headline fact: a cover, a big value, a short line. */
-function feature(title, image, name, big, small, href) {
+function feature(title, note, image, name, big, small, href) {
 	const body = [art(image, name), h('div', { class: 'who' }, h('b', null, big), h('span', null, small))];
-	return h('div', { class: 'card mini' }, h('h3', null, title), href ? h('a', { class: 'feature', href }, body) : h('div', { class: 'feature' }, body));
+	return h('div', { class: 'card mini' }, h('h3', null, title), h('p', { class: 'what' }, note), href ? h('a', { class: 'feature', href }, body) : h('div', { class: 'feature' }, body));
+}
+
+/** A named row of cards; nothing at all if none of its cards have data yet. */
+function cardGroup(name, ...cards) {
+	const shown = cards.filter(Boolean);
+	return shown.length ? h('div', { class: 'group' }, h('h3', { class: 'group-name' }, name), h('div', { class: 'minis' }, shown)) : null;
 }
 
 /** A span that covers every value with a little room either side. */
@@ -239,21 +246,30 @@ function songCards(ins, fmt) {
 	const skipped = (color) => ({ amount: (r) => r.rate, value: (r) => `${r.skipped} of ${r.plays}`, range: [0, 1], color, ends: ['never', 'always'] });
 
 	const km = ins.best_km;
-	return h('div', { class: 'minis' },
-		mini('Most played', ins.most_played, { amount: (r) => r.plays, value: (r) => `${r.plays}×`, color: BLUE }),
-		mini('Fastest', ins.fastest, pace),
-		mini('Endurance', ins.slowest, pace),
-		mini('Carried you furthest', ins.furthest, { amount: (r) => r.distance_m, value: (r) => fmt.dist(r.distance_m), color: BLUE }),
-		mini('On your long runs', ins.long_run, { amount: (r) => r.run_m, value: (r) => fmt.dist(r.run_m), color: BLUE }),
-		mini('New this month', ins.new_this_month, pace),
-		mini('Heart-rate raisers', ins.heart.high, heart),
-		mini('Heart-rate calmers', ins.heart.low, heart),
-		mini('Most skipped', ins.skips.most, skipped('var(--slower)')),
-		mini('Least skipped', ins.skips.least, skipped(BLUE)),
-		mini('Time of day', parts, { amount: (r) => r.speed, value: (r) => fmt.pace(r.speed).split(' ')[0], range: parts.length ? span(parts.map((p) => p.speed), 0.3) : null, plain: true, color: BLUE, ends: ['slower', 'faster'] }),
-		ins.opener ? feature('Your opener', ins.opener.image, ins.opener.name, ins.opener.name, `starts ${plural(ins.opener.count, 'run')}`) : null,
-		km ? feature('Fastest kilometre', km.song && km.song.image, km.song ? km.song.name : '♪', minSec(km.seconds), `${km.song ? km.song.name : 'no music'} · ${day(km.start_time)}`, `#/run/${km.run_id}`) : null,
-	);
+	const note = (o, text) => ({ ...o, note: text });
+	return [
+		cardGroup('Most listened',
+			mini('Most played', ins.most_played, { amount: (r) => r.plays, value: (r) => `${r.plays}×`, color: BLUE, note: 'How many times each song played on your runs.' }),
+			mini('Carried you furthest', ins.furthest, { amount: (r) => r.distance_m, value: (r) => fmt.dist(r.distance_m), color: BLUE, note: 'Total distance you ran while it played.' }),
+			mini('New this month', ins.new_this_month, note(pace, 'First heard on a run in the last 30 days, with your pace.')),
+			ins.opener ? feature('Your opener', 'The song you start runs with most often.', ins.opener.image, ins.opener.name, ins.opener.name, `starts ${plural(ins.opener.count, 'run')}`) : null,
+		),
+		cardGroup('Pace',
+			mini('Fastest', ins.fastest, note(pace, 'Your quickest average pace while it played.')),
+			mini('Endurance', ins.slowest, note(pace, 'Your slowest, steadiest pace: easy-run songs.')),
+			mini('Time of day', parts, { amount: (r) => r.speed, value: (r) => fmt.pace(r.speed).split(' ')[0], range: parts.length ? span(parts.map((p) => p.speed), 0.3) : null, plain: true, color: BLUE, ends: ['slower', 'faster'], note: 'Average pace by when you run, and how many runs.' }),
+			km ? feature('Fastest kilometre', 'Your quickest single km, and what was playing.', km.song && km.song.image, km.song ? km.song.name : '♪', minSec(km.seconds), `${km.song ? km.song.name : 'no music'} · ${day(km.start_time)}`, `#/run/${km.run_id}`) : null,
+		),
+		cardGroup('Heart rate',
+			mini('Raisers', ins.heart.high, note(heart, 'Highest average heart rate while it played.')),
+			mini('Calmers', ins.heart.low, note(heart, 'Lowest average heart rate while it played.')),
+		),
+		cardGroup('Habits',
+			mini('Most skipped', ins.skips.most, note(skipped('var(--slower)'), 'Cut short most often: skips out of plays.')),
+			mini('Least skipped', ins.skips.least, note(skipped(BLUE), 'The ones you nearly always let finish.')),
+			mini('On your long runs', ins.long_run, { amount: (r) => r.run_m, value: (r) => fmt.dist(r.run_m), color: BLUE, note: 'Average length of the runs it plays on.' }),
+		),
+	];
 }
 
 const RUNS_SHOWN = 10;
