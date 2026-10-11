@@ -75,19 +75,60 @@ function cover(i: number): string {
   return 'data:image/svg+xml,' + encodeURIComponent(svg);
 }
 
-const artistBoost = ARTISTS.map(() => gauss() * 0.012);
-const tracks: Track[] = TITLES.map((name, i) => {
-  const a = i % ARTISTS.length;
+// The demo's songs are real ones: tracks that real accounts on this install
+// have actually listened to, with their real covers. Only the songs are real;
+// which run they played on and how fast it was is all generated. If there are
+// too few (a fresh install), the made-up library above fills the gaps.
+interface Listened {
+  name: string;
+  artist: string;
+  image: string | null;
+  duration_s: number;
+}
+
+function listenedTracks(): Listened[] {
+  try {
+    const out = execFileSync(
+      'npx',
+      ['wrangler', 'd1', 'execute', 'cadence', '--remote', '--json', '--command',
+        `SELECT t.name, t.artist, t.image, t.duration_s, COUNT(*) AS plays FROM plays p JOIN tracks t ON t.id = p.track_id
+         JOIN users u ON u.id = p.user_id WHERE u.is_demo = 0 AND t.id NOT LIKE 'sim:%' GROUP BY t.id ORDER BY plays DESC, t.name LIMIT 60`],
+      { stdio: ['ignore', 'pipe', 'ignore'] },
+    ).toString();
+    return JSON.parse(out)[0].results as Listened[];
+  } catch {
+    return [];
+  }
+}
+
+const real = listenedTracks();
+// With a dozen or more real songs the demo uses only those; otherwise made-up ones fill it out.
+const LIBRARY = real.length >= 12 ? Math.min(real.length, 36) : 36;
+// Shuffled with the seed, so which real song gets which role changes run to run.
+for (let i = real.length - 1; i > 0; i--) {
+  const j = Math.floor(rand() * (i + 1));
+  [real[i], real[j]] = [real[j], real[i]];
+}
+const library: Listened[] = real.slice(0, LIBRARY);
+for (let i = 0; library.length < LIBRARY; i++) {
+  library.push({ name: TITLES[i % TITLES.length], artist: ARTISTS[i % ARTISTS.length], image: cover(i), duration_s: Math.round(between(150, 265)) });
+}
+
+// Each artist nudges pace a little, and each song a little more.
+const artistBoost = new Map<string, number>();
+const tracks: Track[] = library.map((song, i) => {
+  const lead = song.artist.split(',')[0].trim();
+  if (!artistBoost.has(lead)) artistBoost.set(lead, gauss() * 0.012);
   return {
     id: `sim:${i}`,
-    name,
-    artist: ARTISTS[a],
-    image: cover(i),
-    duration: Math.round(between(150, 265)),
-    boost: artistBoost[a] + gauss() * 0.022,
+    name: song.name,
+    artist: song.artist,
+    image: song.image ?? cover(i),
+    duration: Math.round(song.duration_s),
+    boost: artistBoost.get(lead)! + gauss() * 0.022,
     weight: 0.3 + rand() ** 2 * 3,
     // A few songs are recent discoveries, so there is something "new this month".
-    since: i >= TITLES.length - 4 ? 0.88 : 0,
+    since: i >= LIBRARY - 4 ? 0.88 : 0,
   };
 });
 
@@ -325,6 +366,7 @@ others.forEach((a, i) => {
 mkdirSync('.sim', { recursive: true });
 writeFileSync('.sim/demo.sql', sql.join('\n') + '\n');
 console.log(`Simulated ${RUNS} runs over ${WEEKS} weeks with ${songCount} songs, plus ${others.length} other activities this week (seed ${SEED}).`);
+console.log(`Songs: ${Math.min(real.length, LIBRARY)} real ones from listening history, ${Math.max(0, LIBRARY - real.length)} made up.`);
 
 // What the simulator baked in, to check the dashboard against.
 const byBoost = [...tracks].sort((a, b) => b.boost - a.boost);
