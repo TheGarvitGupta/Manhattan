@@ -192,7 +192,7 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
 .pair h3, .opened-head h3 { font-size: 16px; letter-spacing: -0.01em; }
 .card > .sub, .opened-head .sub { color: var(--ink-2); font-size: 13px; margin: 2px 0 10px; }
-.rows { list-style: none; margin: 0; padding: 0; }
+.rows { list-style: none; margin: 0 -6px; padding: 0 6px; max-height: 560px; overflow-y: auto; }
 .rows li { border-top: 1px solid var(--grid); }
 .rows .row { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 8px 0; border: 0; background: none; text-align: left; }
 .rows button.row { padding: 9px 6px; margin: 0 -6px; width: calc(100% + 12px); border-radius: 8px; }

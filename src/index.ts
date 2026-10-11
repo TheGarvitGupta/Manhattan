@@ -156,18 +156,21 @@ interface RecentActivity {
   run_id: number | null;
 }
 
+const RECENT_DAYS = 7;
+
 /**
- * The latest activities (of any type) and songs fetched. Each activity comes
- * with the songs that were playing during it, and for how long.
+ * Every activity (of any type) and song from the last week. Each activity
+ * comes with the songs that were playing during it, and for how long.
  */
 async function recent(env: Env, user: User) {
+  const since = now() - RECENT_DAYS * 86400;
   let activities = (
     await env.DB.prepare(
       `SELECT a.strava_id AS id, a.name, a.type, a.start_time, a.elapsed_s, a.distance_m,
               (SELECT id FROM runs WHERE user_id = a.user_id AND strava_id = a.strava_id AND stream_state = 'ok') AS run_id
-       FROM activities a WHERE a.user_id = ? ORDER BY a.start_time DESC LIMIT 20`,
+       FROM activities a WHERE a.user_id = ? AND a.start_time >= ? ORDER BY a.start_time DESC LIMIT 60`,
     )
-      .bind(user.id)
+      .bind(user.id, since)
       .all<RecentActivity>()
   ).results;
   if (!activities.length) {
@@ -175,9 +178,9 @@ async function recent(env: Env, user: User) {
     activities = (
       await env.DB.prepare(
         `SELECT strava_id AS id, name, 'Run' AS type, start_time, elapsed_s, distance_m, id AS run_id FROM runs
-         WHERE user_id = ? AND stream_state = 'ok' ORDER BY start_time DESC LIMIT 8`,
+         WHERE user_id = ? AND stream_state = 'ok' AND start_time >= ? ORDER BY start_time DESC LIMIT 60`,
       )
-        .bind(user.id)
+        .bind(user.id, since)
         .all<RecentActivity>()
     ).results;
   }
@@ -201,9 +204,9 @@ async function recent(env: Env, user: User) {
     skipped: i.skipped,
   });
 
-  // One extra play bounds the start of the oldest song shown.
-  const songs = songIntervals(await playsBetween(0, now() + 60, 101))
-    .slice(-100)
+  // An hour of earlier plays bounds the start of the oldest song shown.
+  const songs = songIntervals(await playsBetween(since - 3600, now() + 60, 1500))
+    .filter((i) => i.to >= since)
     .reverse()
     .map((i) => describe(i));
 

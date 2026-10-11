@@ -1,7 +1,7 @@
 import { changesChart, h, hideTip, minSec, overlapChart, runChart } from './charts.js';
 
 const app = document.getElementById('app');
-const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, allSongs: false, allActivities: false, openActivity: null };
+const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null };
 
 try {
 	if (localStorage.getItem('cadence-units') === 'mi') state.units = 'mi';
@@ -311,8 +311,6 @@ function opened(act, fmt) {
 	return card;
 }
 
-const LATEST_SHOWN = 8;
-
 /** The latest activities and songs side by side; opening an activity lays it out against its songs. */
 function latest(fmt) {
 	const { me, recent } = state;
@@ -336,23 +334,15 @@ function latest(fmt) {
 			h('span', { class: 'at' }, `${dayName(s.to)}, ${clockTime(s.to)} · ${minSec(s.to - s.from)}`),
 		)));
 
-	// Each list starts short; the rest is one tap away.
-	const list = (rows, empty, flag, noun) => {
-		if (!rows.length) return h('p', { class: 'dim' }, empty);
-		const shown = state[flag] ? rows : rows.slice(0, LATEST_SHOWN);
-		return [
-			h('ul', { class: 'rows' }, shown),
-			rows.length > shown.length && h('button', { class: 'btn small more', onclick: () => ((state[flag] = true), render(true)) }, `Show all ${rows.length} ${noun}`),
-		];
-	};
+	const list = (rows, empty) => (rows.length ? h('ul', { class: 'rows' }, rows) : h('p', { class: 'dim' }, empty));
 	return h('section', { id: 'latest' },
-		h('h2', null, 'Latest from your accounts'),
+		h('h2', null, 'The last 7 days'),
 		h('p', { class: 'sub' }, open ? 'What was playing, and for how long.' : 'Open an activity to see what was playing during it.'),
 		open
 			? opened(open, fmt)
 			: h('div', { class: 'pair' },
-				h('div', { class: 'card' }, h('h3', null, 'Strava activities'), h('p', { class: 'sub' }, `Most recent first.${checked(me.strava)}`), list(activities, 'No activities fetched yet. Choose Sync now from the menu.', 'allActivities', 'activities')),
-				h('div', { class: 'card' }, h('h3', null, 'Spotify songs'), h('p', { class: 'sub' }, `When each ended, and how long it played.${checked(me.spotify)}`), list(songs, me.spotify.connected ? 'No songs yet. Play something and check back in a few minutes.' : 'Connect Spotify to see your songs here.', 'allSongs', 'songs')),
+				h('div', { class: 'card' }, h('h3', null, `Strava activities · ${activities.length}`), h('p', { class: 'sub' }, `Most recent first.${checked(me.strava)}`), list(activities, 'No activities in the last 7 days.')),
+				h('div', { class: 'card' }, h('h3', null, `Spotify songs · ${songs.length}`), h('p', { class: 'sub' }, `When each ended, and how long it played.${checked(me.spotify)}`), list(songs, me.spotify.connected ? 'No songs in the last 7 days. Play something and check back in a few minutes.' : 'Connect Spotify to see your songs here.')),
 			),
 	);
 }

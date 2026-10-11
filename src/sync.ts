@@ -94,7 +94,7 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
   stmts.push(
     env.DB.prepare(
       `DELETE FROM activities WHERE user_id = ?1 AND strava_id NOT IN
-         (SELECT strava_id FROM activities WHERE user_id = ?1 ORDER BY start_time DESC LIMIT 20)`,
+         (SELECT strava_id FROM activities WHERE user_id = ?1 ORDER BY start_time DESC LIMIT 60)`,
     ).bind(userId),
   );
   if (stmts.length) await env.DB.batch(stmts);
