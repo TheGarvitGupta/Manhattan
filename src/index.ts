@@ -101,6 +101,13 @@ async function me(env: Env, user: User) {
   )
     .bind(user.id)
     .first<{ runs: number; plays: number }>();
+  // The earliest thing held for this person: their first song or first run.
+  const since = await env.DB.prepare(
+    `SELECT MIN(t) AS t FROM (SELECT MIN(played_at) AS t FROM plays WHERE user_id = ?1
+                               UNION ALL SELECT MIN(start_time) FROM runs WHERE user_id = ?1)`,
+  )
+    .bind(user.id)
+    .first<{ t: number | null }>();
   const conn = (p: Provider) => {
     const t = tokens.results.find((x) => x.provider === p);
     // The demo account has data but no real connections.
@@ -112,6 +119,7 @@ async function me(env: Env, user: User) {
     strava: conn('strava'),
     spotify: conn('spotify'),
     counts,
+    since: since?.t ?? null,
   };
 }
 

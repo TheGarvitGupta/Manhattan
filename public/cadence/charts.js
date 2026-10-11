@@ -8,7 +8,7 @@ export function h(tag, props, ...kids) {
 	return add(el, kids);
 }
 
-function s(tag, props, ...kids) {
+export function s(tag, props, ...kids) {
 	const el = document.createElementNS(SVG, tag);
 	apply(el, props);
 	return add(el, kids);
@@ -35,7 +35,7 @@ function add(el, kids) {
 
 const tip = () => document.getElementById('tip');
 
-function showTip(evt, nodes) {
+export function showTip(evt, nodes) {
 	const el = tip();
 	el.replaceChildren(...nodes);
 	el.hidden = false;
@@ -507,3 +507,53 @@ export function activityChart(container, act, fmt) {
 	};
 }
 
+// --- spectrum: songs placed along one scale ---------------------------------------------
+
+/**
+ * Album covers set out along a line by a single measure (pace, heart rate),
+ * with the person's own average marked. Covers that would overlap stack upward.
+ * `o`: { range: [lo, hi], avg, avgLabel, left, right, describe(item) }.
+ */
+export function spectrum(container, items, o) {
+	const [lo, hi] = o.range;
+	responsive(container, (width) => {
+		const size = width < 480 ? 30 : 40;
+		const gap = size + 4;
+		const pad = size / 2 + 2;
+		const x = (v) => pad + ((v - lo) / (hi - lo || 1)) * (width - 2 * pad);
+
+		const lanes = [];
+		const placed = [...items].sort((a, b) => a.value - b.value).map((item) => {
+			const px = x(item.value);
+			let lane = lanes.findIndex((last) => px - last >= gap);
+			if (lane < 0) lane = lanes.push(px) - 1;
+			else lanes[lane] = px;
+			return { item, px, lane };
+		});
+		const base = Math.max(1, lanes.length) * gap + 4;
+		const root = h('div', { class: 'spectrum', style: { height: `${base + 34}px` } }, h('i', { class: 'line', style: { top: `${base + 6}px` } }));
+
+		if (o.avg != null) {
+			root.append(
+				h('i', { class: 'avg', style: { left: `${x(o.avg)}px`, height: `${base + 12}px` } }),
+				h('span', { class: 'avg-label', style: { left: `${Math.min(width - 70, Math.max(70, x(o.avg)))}px`, top: `${base + 14}px` } }, o.avgLabel),
+			);
+		}
+		root.append(h('span', { class: 'end', style: { left: '0', top: `${base + 14}px` } }, o.left), h('span', { class: 'end', style: { right: '0', top: `${base + 14}px` } }, o.right));
+
+		for (const { item, px, lane } of placed) {
+			const cover = h('button', { class: 'cover', type: 'button', 'aria-label': `${item.name}, ${o.describe(item)}`, style: { left: `${px - size / 2}px`, top: `${base - (lane + 1) * gap}px`, width: `${size}px`, height: `${size}px` } },
+				item.image ? h('img', { src: item.image, alt: '', referrerpolicy: 'no-referrer' }) : (item.name || '?')[0]);
+			const tipFor = (evt) => showTip(evt, [h('div', { class: 'r' }, h('b', null, item.name)), h('div', { class: 't' }, item.artist), h('div', { class: 't' }, o.describe(item))]);
+			cover.addEventListener('pointermove', tipFor);
+			cover.addEventListener('pointerleave', hideTip);
+			cover.addEventListener('focus', () => {
+				const r = cover.getBoundingClientRect();
+				tipFor({ clientX: r.left + r.width / 2, clientY: r.top });
+			});
+			cover.addEventListener('blur', hideTip);
+			root.append(cover);
+		}
+		return root;
+	});
+}

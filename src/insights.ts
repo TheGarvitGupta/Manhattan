@@ -16,6 +16,7 @@ interface RunRow {
   start_time: number;
   distance_m: number;
   moving_s: number;
+  avg_hr: number | null;
   best_km_s: number | null;
   best_km_at: number | null;
 }
@@ -102,7 +103,7 @@ function eligible(songs: Song[], strict: (s: Song) => boolean, loose: (s: Song) 
 export async function buildInsights(env: Env, user: User) {
   const runs = (
     await env.DB.prepare(
-      `SELECT id, start_time, distance_m, moving_s, best_km_s, best_km_at FROM runs
+      `SELECT id, start_time, distance_m, moving_s, avg_hr, best_km_s, best_km_at FROM runs
        WHERE user_id = ? AND stream_state = 'ok' AND moving_s > 0 ORDER BY start_time`,
     )
       .bind(user.id)
@@ -283,6 +284,11 @@ export async function buildInsights(env: Env, user: User) {
   const fam = pair(fresh, familiar);
   const skip = pair(skipped, playedThrough);
 
+  // Average heart rate across all runs, weighted by how long each lasted.
+  const withRate = runs.filter((r) => r.avg_hr != null);
+  const hrTime = withRate.reduce((a, r) => a + r.moving_s, 0);
+  const hrTotal = withRate.reduce((a, r) => a + r.avg_hr! * r.moving_s, 0);
+
   return {
     totals: {
       runs: runs.length,
@@ -291,6 +297,7 @@ export async function buildInsights(env: Env, user: User) {
       moving_s: runs.reduce((a, r) => a + r.moving_s, 0),
       music_s: Math.round(everyRun.reduce((a, r) => a + r.music_s, 0)),
       tracks: songs.size,
+      avg_hr: hrTime ? hrTotal / hrTime : null,
     },
     most_played: mostPlayed,
     fastest,
