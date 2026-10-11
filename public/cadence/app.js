@@ -1,4 +1,4 @@
-import { changesChart, h, hideTip, minSec, overlapChart, runChart } from './charts.js';
+import { activityChart, changesChart, h, hideTip, minSec, runChart, stretchStats } from './charts.js';
 
 const app = document.getElementById('app');
 const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null };
@@ -21,6 +21,7 @@ function formatter() {
 			return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /${unit}`;
 		},
 		dist: (m) => `${(m / unitMeters).toFixed(m / unitMeters >= 100 ? 0 : 1)} ${unit}`,
+		speed: (v) => `${((v * 3600) / unitMeters).toFixed(1)} ${unit}/h`,
 	};
 }
 
@@ -277,10 +278,38 @@ const dayName = (ts) => {
 };
 const kind = (a) => (RUN_TYPES.includes(a.type) ? 'Run' : words(a.type));
 
-/** An opened activity: the activity across the page, and under it each song for as long as it played. */
+/** An opened activity: the activity across the page, its songs under it, and its data under those. */
 function opened(act, fmt) {
 	const box = h('div', { class: 'chart' });
+	const note = h('p', { class: 'sub tally', hidden: true }, 'Speed, heart rate and the rest arrive with the next Strava check, within about 10 minutes.');
+	const table = h('div');
+	const isRun = RUN_TYPES.includes(act.type);
 	const music = act.songs.reduce((sum, s) => sum + (s.to - s.from), 0);
+
+	// The song table gains a column for each measure once the data is in.
+	const fillTable = (streams) => {
+		if (!act.songs.length) return;
+		const stats = act.songs.map((s) => stretchStats(streams, s.from - act.start_time, s.to - act.start_time));
+		const has = (key) => stats.some((x) => x[key] != null);
+		const dash = () => h('span', { class: 'dim' }, '–');
+		const cols = [
+			has('speed') && { label: isRun ? 'Pace' : 'Speed', cls: 'n', get: (x) => (x.speed == null ? dash() : isRun ? fmt.pace(x.speed) : fmt.speed(x.speed)) },
+			has('hr') && { label: 'Heart rate', cls: 'n hide-s', get: (x) => (x.hr == null ? dash() : `${Math.round(x.hr)} bpm`) },
+			has('watts') && { label: 'Power', cls: 'n hide-s', get: (x) => (x.watts == null ? dash() : `${Math.round(x.watts)} W`) },
+		].filter(Boolean);
+		table.replaceChildren(h('div', { class: 'scroll' }, h('table', { class: 'table' },
+			h('thead', null, h('tr', null, h('th', null, 'Song'), h('th', { class: 'n hide-s' }, 'Played'), h('th', { class: 'n' }, 'For'), cols.map((c) => h('th', { class: c.cls }, c.label)))),
+			h('tbody', null, act.songs.map((s, i) =>
+				h('tr', null,
+					h('td', null, h('div', { class: 'song' }, art(s.image, s.name, true), h('div', null, h('b', null, s.name), ' ', h('span', null, s.artist), s.skipped ? h('span', { class: 'dim' }, ' · cut short') : null))),
+					h('td', { class: 'n dim hide-s' }, `${clockTime(s.from)} – ${clockTime(s.to)}`),
+					h('td', { class: 'n' }, minSec(s.to - s.from)),
+					cols.map((c) => h('td', { class: c.cls }, c.get(stats[i]))),
+				),
+			)),
+		)));
+	};
+
 	const card = h('div', { class: 'card' },
 		h('div', { class: 'opened-head' },
 			h('div', null,
@@ -290,24 +319,21 @@ function opened(act, fmt) {
 			h('button', { class: 'btn small', onclick: () => ((state.openActivity = null), render(true)) }, 'Close'),
 		),
 		box,
-		act.songs.length
-			? h('p', { class: 'sub tally' }, `${plural(act.songs.length, 'song')} · music for ${duration(music)} of ${duration(act.elapsed_s)}`)
-			: null,
-		act.songs.length
-			? h('div', { class: 'scroll' }, h('table', { class: 'table' },
-				h('thead', null, h('tr', null, h('th', null, 'Song'), h('th', { class: 'n hide-s' }, 'Played'), h('th', { class: 'n' }, 'For'))),
-				h('tbody', null, act.songs.map((s) =>
-					h('tr', null,
-						h('td', null, h('div', { class: 'song' }, art(s.image, s.name, true), h('div', null, h('b', null, s.name), ' ', h('span', null, s.artist), s.skipped ? h('span', { class: 'dim' }, ' · cut short') : null))),
-						h('td', { class: 'n dim hide-s' }, `${clockTime(s.from)} – ${clockTime(s.to)}`),
-						h('td', { class: 'n' }, minSec(s.to - s.from)),
-					),
-				)),
-			))
-			: null,
+		note,
+		act.songs.length ? h('p', { class: 'sub tally' }, `${plural(act.songs.length, 'song')} · music for ${duration(music)} of ${duration(act.elapsed_s)}`) : null,
+		table,
 		act.run_id ? h('a', { class: 'btn small more', href: `#/run/${act.run_id}` }, 'See pace song by song') : null,
 	);
-	overlapChart(box, act);
+
+	const chart = activityChart(box, act, fmt);
+	fillTable(null);
+	api(`api/activities/${act.id}`)
+		.then(({ streams }) => {
+			chart.setStreams(streams);
+			fillTable(streams);
+			note.hidden = !!streams || !act.songs.length || state.me.user.is_demo;
+		})
+		.catch(() => {});
 	return card;
 }
 

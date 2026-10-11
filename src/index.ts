@@ -299,6 +299,18 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (path === '/api/insights') return json(await buildInsights(env, user));
   if (path === '/api/runs') return json(await listRuns(env, user));
   if (path === '/api/recent') return json(await recent(env, user));
+  const activityMatch = path.match(/^\/api\/activities\/(-?\d+)$/);
+  if (activityMatch) {
+    // Per-second data for one activity; runs fall back to their own copy.
+    const row = await env.DB.prepare(
+      `SELECT COALESCE(
+         (SELECT streams FROM activities WHERE user_id = ?1 AND strava_id = ?2),
+         (SELECT streams FROM runs WHERE user_id = ?1 AND strava_id = ?2)) AS streams`,
+    )
+      .bind(user.id, Number(activityMatch[1]))
+      .first<{ streams: string | null }>();
+    return json({ streams: row?.streams ? JSON.parse(row.streams) : null });
+  }
   const runMatch = path.match(/^\/api\/runs\/(\d+)$/);
   if (runMatch) {
     const run = await getRun(env, user, Number(runMatch[1]));

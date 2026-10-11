@@ -75,7 +75,7 @@ function path(xs, ys) {
 	return d;
 }
 
-/** Redraws when the container changes width. */
+/** Redraws when the container changes width. Returns a function that redraws on demand. */
 function responsive(container, draw) {
 	let last = 0;
 	const ro = new ResizeObserver(() => {
@@ -87,6 +87,7 @@ function responsive(container, draw) {
 		}
 	});
 	ro.observe(container);
+	return () => last && container.replaceChildren(draw(last));
 }
 
 // --- run chart ----------------------------------------------------------------
@@ -324,60 +325,229 @@ export function changesChart(container, points, fmt, describe, open) {
 	});
 }
 
-// --- activity overlap -----------------------------------------------------------
+// --- one activity, with its songs ---------------------------------------------------
 
 const clockTime = (ts) => new Date(ts * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 export const minSec = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+const RUNS = ['Run', 'TrailRun', 'VirtualRun'];
+
+function interp(t, values, at) {
+	const n = t.length;
+	if (at <= t[0]) return values[0];
+	if (at >= t[n - 1]) return values[n - 1];
+	let lo = 0;
+	let hi = n - 1;
+	while (hi - lo > 1) {
+		const mid = (lo + hi) >> 1;
+		if (t[mid] <= at) lo = mid;
+		else hi = mid;
+	}
+	const span = t[hi] - t[lo];
+	return values[lo] + (values[hi] - values[lo]) * (span > 0 ? (at - t[lo]) / span : 0);
+}
+
+/** Averages over one stretch of an activity, e.g. while a song played. `a` and `b` are seconds in. */
+export function stretchStats(st, a, b) {
+	if (!st || st.t.length < 2) return {};
+	const dist = interp(st.t, st.d, b) - interp(st.t, st.d, a);
+	const moving = interp(st.t, st.m, b) - interp(st.t, st.m, a);
+	const mean = (arr) => {
+		if (!arr) return null;
+		let sum = 0;
+		let n = 0;
+		for (let i = 0; i < arr.length; i++) if (arr[i] != null && st.t[i] >= a && st.t[i] <= b) (sum += arr[i]), n++;
+		return n ? sum / n : null;
+	};
+	return { speed: moving >= 5 && dist > 0 ? dist / moving : null, hr: mean(st.hr), watts: mean(st.w), cadence: mean(st.c) };
+}
+
+function smooth(arr, k) {
+	return arr.map((_, i) => {
+		let sum = 0;
+		let n = 0;
+		for (let j = Math.max(0, i - k); j <= Math.min(arr.length - 1, i + k); j++) if (arr[j] != null) (sum += arr[j]), n++;
+		return n ? sum / n : null;
+	});
+}
+
+function niceTicks(lo, hi, steps) {
+	const span = hi - lo || 1;
+	const mag = 10 ** Math.floor(Math.log10(span / 3));
+	const step = (steps || [1, 2, 5, 10].map((m) => m * mag)).find((v) => span / v <= 3) || (steps ? steps[steps.length - 1] : 10 * mag);
+	const out = [];
+	for (let v = Math.floor(lo / step) * step; v < hi + step - 1e-9; v += step) out.push(v);
+	return out;
+}
+
+/** The measures an activity has data for, each as its own panel on its own scale. */
+function measures(st, isRun, fmt) {
+	if (!st || st.t.length < 2) return [];
+	const n = st.t.length;
+	const any = (arr) => !!arr && arr.some((v) => v != null);
+	const out = [];
+
+	if (st.d[n - 1] > 0) {
+		// Speed over a short window, using moving time so stops read as stops.
+		const values = st.t.map((_, i) => {
+			const a = Math.max(0, i - 3);
+			const b = Math.min(n - 1, i + 3);
+			const dm = st.m[b] - st.m[a];
+			const v = dm >= 0.4 * (st.t[b] - st.t[a]) && dm > 0 ? (st.d[b] - st.d[a]) / dm : 0;
+			if (isRun) return v > 0.8 ? fmt.unitMeters / v : null; // pace, seconds per km or mile
+			return (v * 3600) / fmt.unitMeters;
+		});
+		out.push(isRun
+			? { title: `Pace, min/${fmt.unit}`, color: 'var(--pace)', values, invert: true, steps: [10, 15, 20, 30, 60, 120, 300], tick: minSec, tip: (v) => [minSec(v), `/${fmt.unit}`] }
+			: { title: `Speed, ${fmt.unit}/h`, color: 'var(--pace)', values, tick: (v) => v, tip: (v) => [v.toFixed(1), `${fmt.unit}/h`] });
+	}
+	if (any(st.hr)) out.push({ title: 'Heart rate, bpm', color: 'var(--heart)', values: st.hr, tick: (v) => v, tip: (v) => [Math.round(v), 'bpm'] });
+	if (any(st.w)) out.push({ title: 'Power, watts', color: 'var(--power)', values: smooth(st.w, 2), tick: (v) => v, tip: (v) => [Math.round(v), 'W'] });
+	if (any(st.c)) {
+		// Strava counts one foot for runs; double it for steps per minute.
+		const k = isRun ? 2 : 1;
+		out.push({ title: isRun ? 'Cadence, steps/min' : 'Cadence, rpm', color: 'var(--cadence)', values: smooth(st.c, 2).map((v) => (v == null ? null : v * k)), tick: (v) => v, tip: (v) => [Math.round(v), isRun ? 'spm' : 'rpm'] });
+	}
+	if (any(st.a)) out.push({ title: 'Elevation, m', color: 'var(--muted)', values: st.a, tick: (v) => v, tip: (v) => [Math.round(v), 'm'] });
+
+	for (const m of out) {
+		const sorted = m.values.filter((v) => v != null).sort((a, b) => a - b);
+		const ticks = niceTicks(quantile(sorted, 0.02), quantile(sorted, 0.98), m.steps);
+		m.ticks = ticks;
+		m.lo = ticks[0];
+		m.hi = ticks[ticks.length - 1];
+	}
+	return out;
+}
 
 /**
- * An activity laid out left to right in time, with each song that played
- * during it as a block underneath, as wide as the time it played for.
+ * An activity laid out left to right in time: the activity, the songs that
+ * played during it (each as wide as the time it played), and under those one
+ * panel per measure, with a line down through the panels at every song change.
+ * Call setStreams() once the per-second data has loaded.
  */
-export function overlapChart(container, act) {
-	const total = Math.max(1, act.elapsed_s);
-	responsive(container, (width) => {
-		const label = width < 520 ? 0 : 64;
-		const W = width - label;
-		const x = (ts) => ((ts - act.start_time) / total) * W;
-		const lane = (name, track) => h('div', { class: 'lane' }, label ? h('span', { class: 'name', style: { width: `${label}px` } }, name) : null, track);
+export function activityChart(container, act, fmt) {
+	let streams = null;
+	const isRun = RUNS.includes(act.type);
+	const songs = act.songs.map((song) => ({ ...song, a: song.from - act.start_time, b: song.to - act.start_time }));
+
+	const redraw = responsive(container, (width) => {
+		const L = width < 520 ? 40 : 64;
+		const R = 10;
+		const total = Math.max(1, act.elapsed_s, streams ? streams.t[streams.t.length - 1] : 0);
+		const x = (sec) => L + (sec / total) * (width - L - R);
+		const panels = measures(streams, isRun, fmt);
+		const laneH = 32;
+		const actY = 22;
+		const songY = actY + laneH + 6;
+		const panelH = width < 520 ? 72 : 88;
+		const panelGap = 42;
+		const bottom = songY + laneH + panels.length * (panelGap + panelH);
+		const height = bottom + 6;
+		const svg = s('svg', { viewBox: `0 0 ${width} ${height}`, height, role: 'img', 'aria-label': `${act.name}: the songs that played, with speed, heart rate and other data underneath` });
 
 		// Clock times along the top.
-		const step = [300, 600, 900, 1800, 3600, 7200, 14400].find((v) => total / v <= (W < 420 ? 3 : 7)) || 14400;
-		const axis = h('div', { class: 'track ticks', style: { width: `${W}px` } });
+		const step = [300, 600, 900, 1800, 3600, 7200, 14400].find((v) => total / v <= (width < 520 ? 3 : 7)) || 14400;
 		for (let sec = 0; sec <= total; sec += step) {
-			const left = x(act.start_time + sec);
-			if (sec > 0 && left > W - 34) break;
-			axis.append(h('span', { class: sec === 0 ? 'first' : null, style: { left: `${left}px` } }, clockTime(act.start_time + sec)));
+			if (sec > 0 && x(sec) > width - R - 30) break;
+			svg.append(s('text', { x: x(sec), y: 12, 'text-anchor': sec === 0 ? 'start' : 'middle' }, clockTime(act.start_time + sec)));
 		}
+		if (L >= 64) svg.append(s('text', { x: 0, y: actY + 20 }, 'Strava'), s('text', { x: 0, y: songY + 20 }, 'Spotify'));
 
-		const activity = h('div', { class: 'track', style: { width: `${W}px` } }, h('div', { class: 'block act', style: { left: '0px', width: `${W}px` } }, h('span', null, act.name)));
-
-		const songs = h('div', { class: 'track', style: { width: `${W}px` } });
-		if (!act.songs.length) songs.append(h('div', { class: 'none' }, 'No songs were captured during this activity.'));
-		for (const song of act.songs) {
-			// A 2px gap of surface separates neighbouring songs.
-			const w = Math.max(3, x(song.to) - x(song.from) - 2);
-			const block = h('div', { class: 'block song', tabindex: '0', style: { left: `${x(song.from)}px`, width: `${w}px` } });
-			if (w >= 28 && song.image) block.append(h('img', { src: song.image, alt: '', referrerpolicy: 'no-referrer' }));
+		// The activity, then its songs: a 2px gap of surface separates neighbours.
+		const W = width - L - R;
+		svg.append(s('rect', { class: 'actbar', x: L, y: actY, width: W, height: laneH, rx: 6 }), s('rect', { class: 'actedge', x: L, y: actY, width: 3, height: laneH }));
+		if (W >= 30 + act.name.length * 7.2) svg.append(s('text', { class: 'on', x: L + 12, y: actY + 21 }, act.name));
+		if (!songs.length) svg.append(s('text', { x: L, y: songY + 20 }, 'No songs were captured during this activity.'));
+		for (const song of songs) {
+			const x0 = x(song.a);
+			const w = Math.max(3, x(song.b) - x0 - 2);
+			svg.append(s('rect', { class: 'songbar', x: x0, y: songY, width: w, height: laneH, rx: Math.min(6, w / 2) }));
+			const hasArt = !!song.image && w >= 30;
+			if (hasArt) {
+				const img = s('image', { href: song.image, x: x0 + 5, y: songY + 5, width: 22, height: 22, preserveAspectRatio: 'xMidYMid slice' });
+				img.style.clipPath = 'inset(0 round 4px)';
+				svg.append(img);
+			}
 			// Only name a song when the name fits its block.
-			if (w >= (song.image ? 36 : 12) + song.name.length * 6.8) block.append(h('span', null, song.name));
-			const tipFor = (evt) =>
-				showTip(evt, [
-					h('div', { class: 'r' }, h('b', null, song.name)),
-					h('div', { class: 't' }, song.artist),
-					h('div', { class: 't' }, `${clockTime(song.from)} – ${clockTime(song.to)} · played for ${minSec(song.to - song.from)}`),
-				]);
-			block.addEventListener('pointermove', tipFor);
-			block.addEventListener('pointerdown', tipFor);
-			block.addEventListener('pointerleave', hideTip);
-			block.addEventListener('focus', () => {
-				const r = block.getBoundingClientRect();
-				tipFor({ clientX: r.left + r.width / 2, clientY: r.top });
-			});
-			block.addEventListener('blur', hideTip);
-			songs.append(block);
+			const textX = x0 + (hasArt ? 33 : 8);
+			if (w >= textX - x0 + 6 + song.name.length * 7) svg.append(s('text', { class: 'on', x: textX, y: songY + 21 }, song.name));
 		}
 
-		return h('div', { class: 'overlap' }, lane('', axis), lane('Strava', activity), lane('Spotify', songs));
+		// A line down through every panel wherever the song changes.
+		if (panels.length) {
+			const changes = new Set();
+			songs.forEach((song, i) => {
+				if (song.a > 2) changes.add(Math.round(song.a));
+				if (song.b < total - 2 && (i === songs.length - 1 || songs[i + 1].a - song.b > 5)) changes.add(Math.round(song.b));
+			});
+			for (const sec of changes) svg.append(s('line', { class: 'change', x1: x(sec), x2: x(sec), y1: songY + laneH, y2: bottom }));
+		}
+
+		// One panel per measure, each with its own scale (never two scales on one plot).
+		const xs = streams ? streams.t.map(x) : [];
+		panels.forEach((m, i) => {
+			m.top = songY + laneH + panelGap + i * (panelGap + panelH);
+			m.y = (v) => {
+				const f = (Math.min(m.hi, Math.max(m.lo, v)) - m.lo) / (m.hi - m.lo || 1);
+				return m.top + (m.invert ? f : 1 - f) * panelH;
+			};
+			svg.append(s('text', { class: 'strong', x: L, y: m.top - 14 }, m.title));
+			for (const v of m.ticks) svg.append(s('line', { class: 'grid', x1: L, x2: width - R, y1: m.y(v), y2: m.y(v) }), s('text', { x: L - 8, y: m.y(v) + 4, 'text-anchor': 'end' }, m.tick(v)));
+			const line = s('path', { class: 'series', d: path(xs, m.values.map((v) => (v == null ? null : m.y(v)))) });
+			line.style.stroke = m.color;
+			svg.append(line);
+		});
+
+		// Hover: one crosshair for everything, read off in a single tooltip.
+		const cross = s('line', { class: 'cross', y1: actY, y2: bottom, visibility: 'hidden' });
+		const dots = panels.map((m) => {
+			const dot = s('circle', { class: 'dot', r: 4.5, visibility: 'hidden' });
+			dot.style.fill = m.color;
+			return dot;
+		});
+		const hit = s('rect', { class: 'hit', x: L, y: actY, width: W, height: bottom - actY });
+		const move = (evt) => {
+			const box = svg.getBoundingClientRect();
+			let sec = Math.max(0, Math.min(total, ((evt.clientX - box.left - L) / W) * total));
+			let i = -1;
+			if (streams) {
+				i = 0;
+				while (i < streams.t.length - 1 && streams.t[i + 1] <= sec) i++;
+				sec = streams.t[i];
+			}
+			cross.setAttribute('x1', x(sec));
+			cross.setAttribute('x2', x(sec));
+			cross.setAttribute('visibility', 'visible');
+			const rows = [h('div', { class: 't' }, `${clockTime(act.start_time + sec)} · ${minSec(sec)} in`)];
+			panels.forEach((m, k) => {
+				const v = m.values[i];
+				dots[k].setAttribute('visibility', v == null ? 'hidden' : 'visible');
+				if (v == null) return;
+				dots[k].setAttribute('cx', x(sec));
+				dots[k].setAttribute('cy', m.y(v));
+				const [value, unit] = m.tip(v);
+				rows.push(tipRow(m.color, value, unit));
+			});
+			const song = songs.find((q) => sec >= q.a && sec < q.b);
+			rows.push(song
+				? h('div', { class: 'song' }, h('b', null, song.name), h('div', { class: 't' }, `${song.artist} · played for ${minSec(song.b - song.a)}`))
+				: h('div', { class: 'song t' }, 'No song playing'));
+			showTip(evt, rows);
+		};
+		hit.addEventListener('pointermove', move);
+		hit.addEventListener('pointerdown', move);
+		hit.addEventListener('pointerleave', () => {
+			for (const el of [cross, ...dots]) el.setAttribute('visibility', 'hidden');
+			hideTip();
+		});
+		svg.append(cross, ...dots, hit);
+		return svg;
 	});
+
+	return {
+		setStreams(next) {
+			streams = next && next.t && next.t.length > 1 ? next : null;
+			redraw();
+		},
+	};
 }

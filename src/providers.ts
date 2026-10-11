@@ -161,22 +161,27 @@ export async function stravaActivities(token: string, budget: Budget): Promise<S
   return res.json();
 }
 
-/** Per-second streams for one activity, or null if it has none (e.g. a manual entry). */
+/** Per-second streams for one activity of any type, or null if it has none (e.g. a manual entry). */
 export async function stravaStreams(token: string, activityId: number, budget: Budget): Promise<RawStreams | null> {
   const res = await outbound(
     budget,
-    `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=time,distance,moving,heartrate&key_by_type=true`,
+    `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=time,distance,moving,heartrate,watts,cadence,altitude&key_by_type=true`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Strava streams failed (${res.status})`);
   const s = (await res.json()) as Record<string, { data: unknown[] } | undefined>;
-  if (!s.time?.data?.length || !s.distance?.data?.length) return null;
+  if (!s.time?.data?.length) return null;
+  const time = s.time.data as number[];
   return {
-    time: s.time.data as number[],
-    distance: s.distance.data as number[],
+    time,
+    // Indoor sessions (weights, yoga) have no distance.
+    distance: (s.distance?.data as number[] | undefined) ?? time.map(() => 0),
     moving: s.moving?.data as boolean[] | undefined,
     heartrate: s.heartrate?.data as number[] | undefined,
+    watts: s.watts?.data as (number | null)[] | undefined,
+    cadence: s.cadence?.data as number[] | undefined,
+    altitude: s.altitude?.data as number[] | undefined,
   };
 }
 

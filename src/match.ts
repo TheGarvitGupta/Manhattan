@@ -6,6 +6,9 @@ export interface Streams {
   d: number[]; // cumulative metres
   m: number[]; // cumulative moving seconds (excludes stops)
   hr: (number | null)[] | null;
+  w?: (number | null)[] | null; // power, watts
+  c?: (number | null)[] | null; // cadence
+  a?: (number | null)[] | null; // altitude, metres
 }
 
 export interface RawStreams {
@@ -13,6 +16,9 @@ export interface RawStreams {
   distance: number[];
   moving?: boolean[];
   heartrate?: number[];
+  watts?: (number | null)[];
+  cadence?: number[];
+  altitude?: number[];
 }
 
 export interface Play {
@@ -38,10 +44,28 @@ export const PLAYED_AT_IS_END = true;
 
 const MIN_OVERLAP_S = 20;
 
-/** Downsample Strava's per-second streams to one point every `step` seconds. */
-export function normalizeStreams(raw: RawStreams, step = 5): Streams {
+/**
+ * Downsample Strava's per-second streams. Short activities keep a point every
+ * 5 seconds; long ones get coarser points so a stored stream stays small.
+ * Heart rate, power and cadence are averaged over each step.
+ */
+export function normalizeStreams(raw: RawStreams, step?: number): Streams {
   const n = Math.min(raw.time.length, raw.distance.length);
-  const out: Streams = { t: [], d: [], m: [], hr: raw.heartrate ? [] : null };
+  const every = step ?? Math.max(5, Math.ceil((raw.time[n - 1] ?? 0) / 1200));
+  const out: Streams = {
+    t: [],
+    d: [],
+    m: [],
+    hr: raw.heartrate ? [] : null,
+    w: raw.watts ? [] : null,
+    c: raw.cadence ? [] : null,
+    a: raw.altitude ? [] : null,
+  };
+  const averaged = [
+    { from: raw.heartrate, to: out.hr, sum: 0, n: 0 },
+    { from: raw.watts, to: out.w, sum: 0, n: 0 },
+    { from: raw.cadence, to: out.c, sum: 0, n: 0 },
+  ];
   let moving = 0;
   let lastKept = -Infinity;
   for (let i = 0; i < n; i++) {
@@ -50,11 +74,22 @@ export function normalizeStreams(raw: RawStreams, step = 5): Streams {
       const isMoving = raw.moving ? raw.moving[i] : raw.distance[i] > raw.distance[i - 1];
       if (isMoving) moving += dt;
     }
-    if (raw.time[i] - lastKept >= step || i === n - 1) {
+    for (const s of averaged) {
+      const v = s.from?.[i];
+      if (v != null) {
+        s.sum += v;
+        s.n++;
+      }
+    }
+    if (raw.time[i] - lastKept >= every || i === n - 1) {
       out.t.push(raw.time[i]);
       out.d.push(Math.round(raw.distance[i] * 10) / 10);
       out.m.push(moving);
-      out.hr?.push(raw.heartrate?.[i] ?? null);
+      for (const s of averaged) {
+        s.to?.push(s.n ? Math.round(s.sum / s.n) : null);
+        s.sum = s.n = 0;
+      }
+      out.a?.push(raw.altitude?.[i] != null ? Math.round(raw.altitude[i] * 10) / 10 : null);
       lastKept = raw.time[i];
     }
   }

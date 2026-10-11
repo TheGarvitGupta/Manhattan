@@ -135,7 +135,8 @@ function simulateRun(index: number): SimRun {
   const recent: string[] = [];
   const stops = [between(0.2, 0.5), between(0.55, 0.9)].filter(() => rand() < 0.45).map((f) => ({ at: f, left: between(15, 60) }));
 
-  const s: Streams = { t: [0], d: [0], m: [0], hr: [Math.round(between(95, 110))] };
+  const altitude = (at: number) => Math.round((24 + 14 * Math.sin(at / 620 + index + 1.6) + 5 * Math.sin(at / 170)) * 10) / 10;
+  const s: Streams = { t: [0], d: [0], m: [0], hr: [Math.round(between(95, 110))], c: [0], a: [altitude(0)] };
   let t = 0;
   let d = 0;
   let m = 0;
@@ -176,6 +177,9 @@ function simulateRun(index: number): SimRun {
     s.d.push(Math.round(d * 10) / 10);
     s.m.push(m);
     s.hr!.push(Math.round(hr));
+    // One-foot cadence, as Strava reports it for runs.
+    s.c!.push(v === 0 ? 0 : Math.round(83 + 22 * (v / base - 1) + gauss() * 0.8));
+    s.a!.push(altitude(d));
   }
 
   return { name: `${PARTS[part]} ${kind.name}`, start, streams: s, plays, distance: d, moving: m, elapsed: t, avgHr: hrSum / (s.t.length - 1) };

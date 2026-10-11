@@ -108,9 +108,11 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
   for (const run of pending.results) {
     const raw = await stravaStreams(token, run.strava_id, budget);
     if (raw) {
-      await env.DB.prepare(`UPDATE runs SET streams = ?, stream_state = 'ok', matched_at = NULL WHERE id = ?`)
-        .bind(JSON.stringify(normalizeStreams(raw)), run.id)
-        .run();
+      const streams = JSON.stringify(normalizeStreams(raw));
+      await env.DB.batch([
+        env.DB.prepare(`UPDATE runs SET streams = ?, stream_state = 'ok', matched_at = NULL WHERE id = ?`).bind(streams, run.id),
+        env.DB.prepare(`UPDATE activities SET streams = ?, stream_state = 'ok' WHERE user_id = ? AND strava_id = ?`).bind(streams, userId, run.strava_id),
+      ]);
     } else {
       // Streams can lag the upload slightly; give up after a few tries.
       await env.DB.prepare(
@@ -118,6 +120,35 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
            stream_state = CASE WHEN stream_tries >= 2 THEN 'none' ELSE 'pending' END WHERE id = ?`,
       )
         .bind(run.id)
+        .run();
+    }
+  }
+
+  // Other activities only get their detailed data once there are songs to
+  // show against it, which keeps both Strava requests and storage down.
+  const withSongs = await env.DB.prepare(
+    `SELECT a.strava_id FROM activities a
+     WHERE a.user_id = ?1 AND a.stream_state = 'pending' AND a.elapsed_s > 0 AND a.start_time > ?2
+       AND EXISTS (SELECT 1 FROM plays p WHERE p.user_id = a.user_id
+                   AND p.played_at > a.start_time AND p.played_at <= a.start_time + a.elapsed_s + 600)
+     ORDER BY a.start_time DESC LIMIT 3`,
+  )
+    .bind(userId, now() - 7 * DAY)
+    .all<{ strava_id: number }>();
+
+  for (const a of withSongs.results) {
+    const raw = await stravaStreams(token, a.strava_id, budget);
+    if (raw) {
+      await env.DB.prepare(`UPDATE activities SET streams = ?, stream_state = 'ok' WHERE user_id = ? AND strava_id = ?`)
+        .bind(JSON.stringify(normalizeStreams(raw)), userId, a.strava_id)
+        .run();
+    } else {
+      await env.DB.prepare(
+        `UPDATE activities SET stream_tries = stream_tries + 1,
+           stream_state = CASE WHEN stream_tries >= 2 THEN 'none' ELSE 'pending' END
+         WHERE user_id = ? AND strava_id = ?`,
+      )
+        .bind(userId, a.strava_id)
         .run();
     }
   }

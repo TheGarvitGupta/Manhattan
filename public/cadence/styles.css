@@ -15,6 +15,8 @@
 	--heart: #eb6834;
 	--faster: #2a78d6;
 	--slower: #e34948;
+	--power: #6250d6;
+	--cadence: #eda100;
 	--strava: #fc4c02;
 	--spotify: #1db954;
 }
@@ -36,6 +38,8 @@
 		--heart: #d95926;
 		--faster: #3987e5;
 		--slower: #e66767;
+		--power: #9085e9;
+		--cadence: #c98500;
 	}
 }
 
@@ -209,19 +213,13 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .opened-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .tally { margin-top: 14px !important; }
 
-.overlap { display: grid; gap: 6px; }
-.overlap .lane { display: flex; align-items: center; }
-.overlap .name { flex: none; color: var(--muted); font-size: 12px; }
-.overlap .track { position: relative; height: 34px; flex: none; }
-.overlap .ticks { height: 18px; }
-.overlap .ticks span { position: absolute; top: 0; transform: translateX(-50%); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.overlap .ticks span.first { transform: none; }
-.overlap .block { position: absolute; top: 0; height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 6px; border-radius: 6px; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.overlap .block.act { background: color-mix(in srgb, var(--strava) 16%, var(--surface)); box-shadow: inset 3px 0 0 var(--strava); padding-left: 12px; }
-.overlap .block.song { background: color-mix(in srgb, var(--spotify) 22%, var(--surface)); cursor: default; }
-.overlap .block.song:hover, .overlap .block.song:focus { background: color-mix(in srgb, var(--spotify) 38%, var(--surface)); outline: none; }
-.overlap .block img { width: 22px; height: 22px; border-radius: 4px; flex: none; margin-left: -3px; }
-.overlap .none { position: absolute; inset: 0; display: flex; align-items: center; color: var(--muted); font-size: 13px; }
+.chart .actbar { fill: var(--strava); fill-opacity: 0.16; }
+.chart .actedge { fill: var(--strava); }
+.chart .songbar { fill: var(--spotify); fill-opacity: 0.24; }
+.chart .change { stroke: var(--axis); stroke-width: 1; }
+.chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart text.on { fill: var(--ink); font-weight: 600; font-size: 13px; }
+.tip .song.t { color: var(--muted); }
 
 .back { display: inline-block; color: var(--ink-2); text-decoration: none; font-size: 14px; margin-bottom: 8px; }
 .back:hover { color: var(--ink); }
