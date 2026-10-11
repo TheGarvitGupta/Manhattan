@@ -411,16 +411,29 @@ function latest(fmt) {
 	);
 }
 
+// Runs with music needed before the song cards replace the "collecting" view.
+const RUNS_NEEDED = 5;
+
 function dashboard() {
 	const { me, insights: ins, runs } = state;
 	const fmt = formatter();
 	const page = h('div', { class: 'wrap' }, header(), notices());
 
-	if (!runs.length) {
-		page.append(h('div', { class: 'card note' }, h('p', null,
-			h('strong', null, 'Nothing to show yet.'),
-			'Cadence starts collecting when you connect. Spotify only shares your most recent songs, so earlier runs can’t be matched. Go for a run with music on and check back afterwards.')));
-		page.append(latest(fmt), footer());
+	// Until there are enough runs with music for the song cards to mean anything,
+	// the page shows what is being collected instead: the last 7 days.
+	const have = ins.totals.runs_with_music;
+	if (have < RUNS_NEEDED) {
+		page.append(h('div', { class: 'card note collecting' },
+			h('p', null,
+				h('strong', null, `Collecting your runs: ${have} of ${RUNS_NEEDED}`),
+				`Your song patterns appear after ${RUNS_NEEDED} runs with music. Cadence can only match songs it sees from the day you connect, so just keep running with Spotify on.`),
+			h('i', { class: 'meter' }, h('i', { style: { width: `${(have / RUNS_NEEDED) * 100}%`, background: 'var(--pace)' } })),
+		));
+		page.append(latest(fmt));
+		if (runs.length) {
+			page.append(h('section', null, h('h2', null, 'Runs'), h('p', { class: 'sub' }, 'Open a run to see its pace song by song.'), runsTable(runs, fmt)));
+		}
+		page.append(footer());
 		return page;
 	}
 
@@ -443,7 +456,7 @@ function dashboard() {
 		h('p', { class: 'sub' }, me.user.is_demo || !me.strava.last_sync_at ? 'Open a run to see its pace song by song.' : `Open a run to see its pace song by song. Last checked Strava ${ago(me.strava.last_sync_at)}.`),
 		runsTable(runs, fmt),
 	));
-	page.append(latest(fmt), footer());
+	page.append(footer());
 	return page;
 }
 
