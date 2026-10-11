@@ -1,7 +1,7 @@
 // Pulls new songs and runs for a user, then lines them up.
 
 import { bestStretch, matchSongs, MILE_M, normalizeStreams, Play, Streams } from './match';
-import { accessToken, markRevoked, RUN_TYPES, spotifyRecentlyPlayed, stravaActivities, stravaStreams } from './providers';
+import { accessToken, markRevoked, RUN_TYPES, spotifyRecentlyPlayed, stravaActivities, stravaStreams, stravaUnits } from './providers';
 import { Budget, BudgetExceeded, Env, now, RateLimited } from './util';
 
 const DAY = 86400;
@@ -60,7 +60,12 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
   const token = await accessToken(env, userId, 'strava', budget);
   if (!token) return;
 
-  const user = await env.DB.prepare(`SELECT created_at FROM users WHERE id = ?`).bind(userId).first<{ created_at: number }>();
+  const user = await env.DB.prepare(`SELECT created_at, units FROM users WHERE id = ?`).bind(userId).first<{ created_at: number; units: string | null }>();
+  // Miles or kilometres follows the person's Strava setting. Asked once.
+  if (user && user.units == null) {
+    const units = await stravaUnits(token, budget);
+    await env.DB.prepare(`UPDATE users SET units = ? WHERE id = ?`).bind(units ?? '-', userId).run();
+  }
   // Runs from before someone joined have no songs to match, so they are skipped.
   const cutoff = (user?.created_at ?? now()) - FIRST_SYNC_LOOKBACK;
   const activities = await stravaActivities(token, budget);

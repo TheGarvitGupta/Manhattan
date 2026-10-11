@@ -4,8 +4,14 @@ import { activityChart, h, hideTip, minSec, runChart, s as svg, spectrum, stretc
 const app = document.getElementById('app');
 const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null, emailScenario: 'patterns' };
 
+// Units follow the person's Strava setting unless they pick one here.
+let unitsChosen = false;
 try {
-	if (localStorage.getItem('cadence-units') === 'mi') state.units = 'mi';
+	const saved = localStorage.getItem('cadence-units');
+	if (saved === 'mi' || saved === 'km') {
+		state.units = saved;
+		unitsChosen = true;
+	}
 } catch {}
 
 // --- formatting ---------------------------------------------------------------
@@ -52,6 +58,7 @@ async function api(path, method = 'GET', payload) {
 async function load() {
 	try {
 		state.me = await api('api/me');
+		if (!unitsChosen && state.me.units) state.units = state.me.units;
 	} catch (err) {
 		if (err.status !== 401) return fail(err);
 		state.me = null;
@@ -95,6 +102,7 @@ function header() {
 			'aria-pressed': String(state.units === u),
 			onclick: () => {
 				state.units = u;
+				unitsChosen = true;
 				try {
 					localStorage.setItem('cadence-units', u);
 				} catch {}

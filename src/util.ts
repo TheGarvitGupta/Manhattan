@@ -23,6 +23,8 @@ export interface User {
   is_demo: number;
   spotify_since: number | null;
   last_sync_at: number | null;
+  // 'mi' or 'km' from Strava; null until asked, '-' if Strava gave no answer.
+  units: string | null;
 }
 
 export const now = () => Math.floor(Date.now() / 1000);

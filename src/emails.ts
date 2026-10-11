@@ -144,8 +144,9 @@ function glyphTile(type: string, app: string): string {
         ? 'weight'
         : null;
   if (!key) return cover(null, kind(type), 44);
-  // Each kind has its own colour: runs in Cadence violet, rides blue, weights orange.
-  const tint = { run: '#ecebfa', ride: '#e6f0fb', weight: '#fdeee7' }[key];
+  // Each kind has its own background colour, with the glyph in white: runs in
+  // Cadence violet, rides blue, weights orange.
+  const tint = { run: '#6250d6', ride: '#2a78d6', weight: '#eb6834' }[key];
   return `<div style="width:44px;height:44px;border-radius:9px;background:${tint};text-align:center;"><img src="${esc(app)}glyphs/${key}.png" width="22" height="22" alt="${esc(kind(type))}" style="display:inline-block;margin-top:11px;border:0;"></div>`;
 }
 
@@ -313,7 +314,9 @@ export async function hasPatterns(env: Env, user: User): Promise<boolean> {
 }
 
 export function buildEmail(env: Env, origin: string, user: EmailUser, which: Kind, opts: { unit?: string; variant?: Variant } = {}): Promise<Email> {
-  const unit = opts.unit === 'mi' || opts.unit === 'km' ? opts.unit : user.email_units === 'mi' ? 'mi' : 'km';
+  // A preview can ask for a unit; otherwise the person's Strava setting decides.
+  const own = user.units === 'mi' || user.units === 'km' ? user.units : user.email_units === 'mi' ? 'mi' : 'km';
+  const unit = opts.unit === 'mi' || opts.unit === 'km' ? opts.unit : own;
   return which === 'welcome' ? welcome(env, origin, user) : weekly(env, origin, user, unit, opts.variant);
 }
 

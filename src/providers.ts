@@ -214,3 +214,11 @@ export async function spotifyRecentlyPlayed(token: string, afterMs: number, budg
   if (!res.ok) throw new Error(`Spotify recently-played failed (${res.status})`);
   return ((await res.json()) as { items?: SpotifyPlay[] }).items ?? [];
 }
+
+/** The athlete's own unit setting in Strava: 'mi', 'km', or null if Strava doesn't say. */
+export async function stravaUnits(token: string, budget: Budget): Promise<'mi' | 'km' | null> {
+  const res = await outbound(budget, 'https://www.strava.com/api/v3/athlete', { headers: { authorization: `Bearer ${token}` } });
+  if (!res.ok) return null;
+  const pref = ((await res.json()) as { measurement_preference?: string }).measurement_preference;
+  return pref === 'feet' ? 'mi' : pref === 'meters' ? 'km' : null;
+}

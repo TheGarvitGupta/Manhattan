@@ -117,6 +117,8 @@ async function me(env: Env, user: User) {
   };
   return {
     user: { name: user.name, avatar: user.avatar, is_demo: !!user.is_demo },
+    // Their Strava setting, when known.
+    units: user.units === 'mi' || user.units === 'km' ? user.units : null,
     strava: conn('strava'),
     spotify: conn('spotify'),
     counts,
