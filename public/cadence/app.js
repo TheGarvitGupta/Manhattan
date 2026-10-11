@@ -1,7 +1,7 @@
-import { changesChart, h, hideTip, runChart } from './charts.js';
+import { changesChart, h, hideTip, minSec, overlapChart, runChart } from './charts.js';
 
 const app = document.getElementById('app');
-const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false };
+const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null };
 
 try {
 	if (localStorage.getItem('cadence-units') === 'mi') state.units = 'mi';
@@ -270,59 +270,80 @@ function runsTable(all, fmt) {
 const RUN_TYPES = ['Run', 'TrailRun', 'VirtualRun'];
 const words = (type) => type.replace(/([a-z])([A-Z])/g, '$1 $2');
 
-/** One timeline of the latest songs and activities fetched, to show the connections are alive. */
+const clockTime = (ts) => new Date(ts * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const dayName = (ts) => {
+	const today = new Date().setHours(0, 0, 0, 0) / 1000;
+	return ts >= today ? 'Today' : ts >= today - 86400 ? 'Yesterday' : new Date(ts * 1000).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+};
+const kind = (a) => (RUN_TYPES.includes(a.type) ? 'Run' : words(a.type));
+
+/** An opened activity: the activity across the page, and under it each song for as long as it played. */
+function opened(act, fmt) {
+	const box = h('div', { class: 'chart' });
+	const music = act.songs.reduce((sum, s) => sum + (s.to - s.from), 0);
+	const card = h('div', { class: 'card' },
+		h('div', { class: 'opened-head' },
+			h('div', null,
+				h('h3', null, act.name),
+				h('p', { class: 'sub' }, `${kind(act)} · ${dayName(act.start_time)}, ${clockTime(act.start_time)} – ${clockTime(act.start_time + act.elapsed_s)} · ${duration(act.elapsed_s)}${act.distance_m ? ` · ${fmt.dist(act.distance_m)}` : ''}`),
+			),
+			h('button', { class: 'btn small', onclick: () => ((state.openActivity = null), render(true)) }, 'Close'),
+		),
+		box,
+		act.songs.length
+			? h('p', { class: 'sub tally' }, `${plural(act.songs.length, 'song')} · music for ${duration(music)} of ${duration(act.elapsed_s)}`)
+			: null,
+		act.songs.length
+			? h('div', { class: 'scroll' }, h('table', { class: 'table' },
+				h('thead', null, h('tr', null, h('th', null, 'Song'), h('th', { class: 'n hide-s' }, 'Played'), h('th', { class: 'n' }, 'For'))),
+				h('tbody', null, act.songs.map((s) =>
+					h('tr', null,
+						h('td', null, h('div', { class: 'song' }, art(s.image, s.name, true), h('div', null, h('b', null, s.name), ' ', h('span', null, s.artist), s.skipped ? h('span', { class: 'dim' }, ' · cut short') : null))),
+						h('td', { class: 'n dim hide-s' }, `${clockTime(s.from)} – ${clockTime(s.to)}`),
+						h('td', { class: 'n' }, minSec(s.to - s.from)),
+					),
+				)),
+			))
+			: null,
+		act.run_id ? h('a', { class: 'btn small more', href: `#/run/${act.run_id}` }, 'See pace song by song') : null,
+	);
+	overlapChart(box, act);
+	return card;
+}
+
+/** The latest activities and songs side by side; opening an activity lays it out against its songs. */
 function latest(fmt) {
 	const { me, recent } = state;
-	const items = [
-		...recent.songs.map((s) => ({ ...s, at: s.played_at, song: true })),
-		...recent.activities.map((a) => ({ ...a, at: a.start_time })),
-	].sort((x, y) => y.at - x.at);
+	const open = recent.activities.find((a) => a.id === state.openActivity);
+	const checked = (c) => (me.user.is_demo || !c.last_sync_at ? '' : ` Checked ${ago(c.last_sync_at)}.`);
 
-	const checked = [['Spotify', me.spotify], ['Strava', me.strava]]
-		.filter(([, c]) => !me.user.is_demo && c.last_sync_at)
-		.map(([name, c]) => `${name} checked ${ago(c.last_sync_at)}`)
-		.join(' · ');
-
-	const today = new Date().setHours(0, 0, 0, 0) / 1000;
-	const dayLabel = (ts) => (ts >= today ? 'Today' : ts >= today - 86400 ? 'Yesterday' : new Date(ts * 1000).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }));
-	const time = (ts) => new Date(ts * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-
-	const rows = [];
-	let heading = null;
-	for (const item of items) {
-		const label = dayLabel(item.at);
-		if (label !== heading) rows.push(h('li', { class: 'day' }, (heading = label)));
-		if (item.song) {
-			rows.push(h('li', { class: 'song' },
-				h('span', { class: 'at' }, time(item.at)),
-				h('i', { class: 'dot' }),
-				art(item.image, item.name, true),
-				h('div', { class: 'who' }, h('b', null, item.name), h('span', null, item.artist)),
-			));
-			continue;
-		}
-		const isRun = RUN_TYPES.includes(item.type);
-		const who = h('div', { class: 'who' },
-			h('b', null, item.name),
-			h('span', null, isRun ? `Run · ${fmt.dist(item.distance_m)}${item.run_id ? '' : ' · not tracked'}` : `${words(item.type)} · not a run, so not tracked`),
-		);
-		rows.push(h('li', { class: `act${isRun ? '' : ' off'}` },
-			h('span', { class: 'at' }, time(item.at)),
-			h('i', { class: 'dot' }),
-			item.run_id ? h('a', { href: `#/run/${item.run_id}` }, who) : who,
-		));
-	}
-
-	return h('section', null,
-		h('h2', null, 'Latest from your accounts'),
-		h('p', { class: 'sub' }, checked || 'The most recent songs and activities Cadence has picked up.'),
-		h('div', { class: 'card' },
-			h('div', { class: 'legend' },
-				h('span', null, h('i', { class: 'key round', style: { background: 'var(--spotify)' } }), 'Song played on Spotify'),
-				h('span', null, h('i', { class: 'key round', style: { background: 'var(--strava)' } }), 'Activity on Strava'),
+	const activities = recent.activities.map((a) =>
+		h('li', null, h('button', { class: `row${RUN_TYPES.includes(a.type) ? '' : ' off'}`, onclick: () => ((state.openActivity = a.id), render(true)) },
+			h('div', { class: 'who' },
+				h('b', null, a.name),
+				h('span', null, `${kind(a)} · ${duration(a.elapsed_s)} · ${a.songs.length ? plural(a.songs.length, 'song') : 'no songs'}`),
 			),
-			rows.length ? h('ol', { class: 'timeline' }, rows) : h('p', { class: 'dim' }, 'Nothing fetched yet. Choose Sync now from the menu, or play a song and check back in a few minutes.'),
-		),
+			h('span', { class: 'at' }, `${dayName(a.start_time)}, ${clockTime(a.start_time)}`),
+			h('span', { class: 'go', 'aria-hidden': 'true' }, '›'),
+		)));
+
+	const songs = recent.songs.map((s) =>
+		h('li', null, h('div', { class: 'row' },
+			art(s.image, s.name, true),
+			h('div', { class: 'who' }, h('b', null, s.name), h('span', null, s.artist)),
+			h('span', { class: 'at' }, `${dayName(s.to)}, ${clockTime(s.to)} · ${minSec(s.to - s.from)}`),
+		)));
+
+	const list = (rows, empty) => (rows.length ? h('ul', { class: 'rows' }, rows) : h('p', { class: 'dim' }, empty));
+	return h('section', { id: 'latest' },
+		h('h2', null, 'Latest from your accounts'),
+		h('p', { class: 'sub' }, open ? 'What was playing, and for how long.' : 'Open an activity to see what was playing during it.'),
+		open
+			? opened(open, fmt)
+			: h('div', { class: 'pair' },
+				h('div', { class: 'card' }, h('h3', null, 'Strava activities'), h('p', { class: 'sub' }, `Most recent first.${checked(me.strava)}`), list(activities, 'No activities fetched yet. Choose Sync now from the menu.')),
+				h('div', { class: 'card' }, h('h3', null, 'Spotify songs'), h('p', { class: 'sub' }, `When each ended, and how long it played.${checked(me.spotify)}`), list(songs, me.spotify.connected ? 'No songs yet. Play something and check back in a few minutes.' : 'Connect Spotify to see your songs here.')),
+			),
 	);
 }
 

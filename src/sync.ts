@@ -76,9 +76,10 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
     // Every activity is noted for the "recent activity" list; only runs are kept in full.
     stmts.push(
       env.DB.prepare(
-        `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m) VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT (user_id, strava_id) DO UPDATE SET name = excluded.name, type = excluded.type, distance_m = excluded.distance_m`,
-      ).bind(userId, a.id, a.name, type, start, a.distance ?? 0),
+        `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m, elapsed_s) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (user_id, strava_id) DO UPDATE SET
+           name = excluded.name, type = excluded.type, distance_m = excluded.distance_m, elapsed_s = excluded.elapsed_s`,
+      ).bind(userId, a.id, a.name, type, start, a.distance ?? 0, a.elapsed_time ?? 0),
     );
     if (RUN_TYPES.has(type) && a.distance > 0 && start >= cutoff) {
       stmts.push(

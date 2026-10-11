@@ -323,3 +323,61 @@ export function changesChart(container, points, fmt, describe, open) {
 		return svg;
 	});
 }
+
+// --- activity overlap -----------------------------------------------------------
+
+const clockTime = (ts) => new Date(ts * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+export const minSec = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+
+/**
+ * An activity laid out left to right in time, with each song that played
+ * during it as a block underneath, as wide as the time it played for.
+ */
+export function overlapChart(container, act) {
+	const total = Math.max(1, act.elapsed_s);
+	responsive(container, (width) => {
+		const label = width < 520 ? 0 : 64;
+		const W = width - label;
+		const x = (ts) => ((ts - act.start_time) / total) * W;
+		const lane = (name, track) => h('div', { class: 'lane' }, label ? h('span', { class: 'name', style: { width: `${label}px` } }, name) : null, track);
+
+		// Clock times along the top.
+		const step = [300, 600, 900, 1800, 3600, 7200, 14400].find((v) => total / v <= (W < 420 ? 3 : 7)) || 14400;
+		const axis = h('div', { class: 'track ticks', style: { width: `${W}px` } });
+		for (let sec = 0; sec <= total; sec += step) {
+			const left = x(act.start_time + sec);
+			if (sec > 0 && left > W - 34) break;
+			axis.append(h('span', { class: sec === 0 ? 'first' : null, style: { left: `${left}px` } }, clockTime(act.start_time + sec)));
+		}
+
+		const activity = h('div', { class: 'track', style: { width: `${W}px` } }, h('div', { class: 'block act', style: { left: '0px', width: `${W}px` } }, h('span', null, act.name)));
+
+		const songs = h('div', { class: 'track', style: { width: `${W}px` } });
+		if (!act.songs.length) songs.append(h('div', { class: 'none' }, 'No songs were captured during this activity.'));
+		for (const song of act.songs) {
+			// A 2px gap of surface separates neighbouring songs.
+			const w = Math.max(3, x(song.to) - x(song.from) - 2);
+			const block = h('div', { class: 'block song', tabindex: '0', style: { left: `${x(song.from)}px`, width: `${w}px` } });
+			if (w >= 28 && song.image) block.append(h('img', { src: song.image, alt: '', referrerpolicy: 'no-referrer' }));
+			// Only name a song when the name fits its block.
+			if (w >= (song.image ? 36 : 12) + song.name.length * 6.8) block.append(h('span', null, song.name));
+			const tipFor = (evt) =>
+				showTip(evt, [
+					h('div', { class: 'r' }, h('b', null, song.name)),
+					h('div', { class: 't' }, song.artist),
+					h('div', { class: 't' }, `${clockTime(song.from)} – ${clockTime(song.to)} · played for ${minSec(song.to - song.from)}`),
+				]);
+			block.addEventListener('pointermove', tipFor);
+			block.addEventListener('pointerdown', tipFor);
+			block.addEventListener('pointerleave', hideTip);
+			block.addEventListener('focus', () => {
+				const r = block.getBoundingClientRect();
+				tipFor({ clientX: r.left + r.width / 2, clientY: r.top });
+			});
+			block.addEventListener('blur', hideTip);
+			songs.append(block);
+		}
+
+		return h('div', { class: 'overlap' }, lane('', axis), lane('Strava', activity), lane('Spotify', songs));
+	});
+}

@@ -79,6 +79,30 @@ export function interp(t: number[], values: number[], at: number): number {
   return values[lo] + (values[hi] - values[lo]) * f;
 }
 
+export interface SongInterval<T extends Play> {
+  play: T;
+  from: number; // unix seconds
+  to: number;
+  skipped: boolean;
+}
+
+/** When each play started and stopped, oldest first. */
+export function songIntervals<T extends Play>(plays: T[]): SongInterval<T>[] {
+  const sorted = [...plays].sort((a, b) => a.played_at - b.played_at);
+  return sorted.map((p, i) => {
+    if (PLAYED_AT_IS_END) {
+      const to = p.played_at;
+      const prevEnd = i > 0 ? sorted[i - 1].played_at : -Infinity;
+      const from = Math.max(to - p.duration_s, prevEnd);
+      return { play: p, from, to, skipped: i > 0 && to - from < p.duration_s * 0.9 };
+    }
+    const from = p.played_at;
+    const nextStart = i < sorted.length - 1 ? sorted[i + 1].played_at : Infinity;
+    const to = Math.min(from + p.duration_s, nextStart);
+    return { play: p, from, to, skipped: to - from < p.duration_s * 0.9 };
+  });
+}
+
 /**
  * Work out which song was playing during which part of a run.
  * `plays` should include a little history before the run so the first song's
@@ -87,26 +111,9 @@ export function interp(t: number[], values: number[], at: number): number {
 export function matchSongs(startTime: number, s: Streams, plays: Play[]): RunSong[] {
   if (s.t.length < 2) return [];
   const total = s.t[s.t.length - 1];
-  const sorted = [...plays].sort((a, b) => a.played_at - b.played_at);
   const songs: RunSong[] = [];
 
-  for (let i = 0; i < sorted.length; i++) {
-    const p = sorted[i];
-    let from: number;
-    let to: number;
-    let skipped: boolean;
-    if (PLAYED_AT_IS_END) {
-      to = p.played_at;
-      const prevEnd = i > 0 ? sorted[i - 1].played_at : -Infinity;
-      from = Math.max(to - p.duration_s, prevEnd);
-      skipped = i > 0 && to - from < p.duration_s * 0.9;
-    } else {
-      from = p.played_at;
-      const nextStart = i < sorted.length - 1 ? sorted[i + 1].played_at : Infinity;
-      to = Math.min(from + p.duration_s, nextStart);
-      skipped = to - from < p.duration_s * 0.9;
-    }
-
+  for (const { play: p, from, to, skipped } of songIntervals(plays)) {
     const a = Math.max(0, from - startTime);
     const b = Math.min(total, to - startTime);
     if (b - a < MIN_OVERLAP_S) continue;

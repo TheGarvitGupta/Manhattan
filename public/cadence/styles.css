@@ -189,24 +189,39 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 
 .btn.more { margin-top: 14px; font-size: 14px; padding: 8px 14px; }
 
-.key.round { border-radius: 50%; width: 10px; height: 10px; }
-.timeline { list-style: none; margin: 0; padding: 0; position: relative; }
-.timeline::before { content: ""; position: absolute; left: 81px; top: 6px; bottom: 6px; width: 1px; background: var(--grid); }
-.timeline li { display: flex; align-items: center; gap: 12px; padding: 6px 0; min-width: 0; position: relative; }
-.timeline .day { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 14px 0 4px 100px; }
-.timeline .day:first-child { padding-top: 2px; }
-.timeline .at { width: 64px; flex: none; text-align: right; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.timeline .dot { width: 11px; height: 11px; flex: none; border-radius: 50%; border: 2px solid var(--surface); box-sizing: content-box; margin: 0 -2px; background: var(--spotify); position: relative; }
-.timeline .act .dot { background: var(--strava); }
-.timeline .who { flex: 1; min-width: 0; }
-.timeline .who b, .timeline .who span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.timeline .who b { font-weight: 600; font-size: 14px; }
-.timeline .who span { color: var(--ink-2); font-size: 13px; }
-.timeline .act { padding: 9px 0; }
-.timeline .act .who b { font-size: 15px; }
-.timeline .off .who b { font-weight: 500; color: var(--ink-2); }
-.timeline li > a { flex: 1; min-width: 0; text-decoration: none; }
-.timeline li > a:hover b { text-decoration: underline; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+.pair h3, .opened-head h3 { font-size: 16px; letter-spacing: -0.01em; }
+.card > .sub, .opened-head .sub { color: var(--ink-2); font-size: 13px; margin: 2px 0 10px; }
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows li { border-top: 1px solid var(--grid); }
+.rows .row { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 8px 0; border: 0; background: none; text-align: left; }
+.rows button.row { padding: 9px 6px; margin: 0 -6px; width: calc(100% + 12px); border-radius: 8px; }
+.rows button.row:hover { background: var(--wash); }
+.rows .who { flex: 1; min-width: 0; }
+.rows .who b, .rows .who span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rows .who b { font-weight: 600; font-size: 14px; }
+.rows .who span, .rows .at { color: var(--ink-2); font-size: 13px; }
+.rows .at { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rows .go { color: var(--muted); font-size: 18px; line-height: 1; }
+.rows .off .who b { font-weight: 500; }
+
+.btn.small { padding: 7px 13px; font-size: 14px; }
+.opened-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.tally { margin-top: 14px !important; }
+
+.overlap { display: grid; gap: 6px; }
+.overlap .lane { display: flex; align-items: center; }
+.overlap .name { flex: none; color: var(--muted); font-size: 12px; }
+.overlap .track { position: relative; height: 34px; flex: none; }
+.overlap .ticks { height: 18px; }
+.overlap .ticks span { position: absolute; top: 0; transform: translateX(-50%); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.overlap .ticks span.first { transform: none; }
+.overlap .block { position: absolute; top: 0; height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 6px; border-radius: 6px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.overlap .block.act { background: color-mix(in srgb, var(--strava) 16%, var(--surface)); box-shadow: inset 3px 0 0 var(--strava); padding-left: 12px; }
+.overlap .block.song { background: color-mix(in srgb, var(--spotify) 22%, var(--surface)); cursor: default; }
+.overlap .block.song:hover, .overlap .block.song:focus { background: color-mix(in srgb, var(--spotify) 38%, var(--surface)); outline: none; }
+.overlap .block img { width: 22px; height: 22px; border-radius: 4px; flex: none; margin-left: -3px; }
+.overlap .none { position: absolute; inset: 0; display: flex; align-items: center; color: var(--muted); font-size: 13px; }
 
 .back { display: inline-block; color: var(--ink-2); text-decoration: none; font-size: 14px; margin-bottom: 8px; }
 .back:hover { color: var(--ink); }

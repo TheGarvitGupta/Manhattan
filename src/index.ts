@@ -2,6 +2,7 @@
 // Routes live under env.BASE_PATH (/cadence) so the app can sit on the main site.
 
 import { buildInsights } from './insights';
+import { SongInterval, songIntervals } from './match';
 import { accessToken, authorizeUrl, exchangeSpotifyCode, exchangeStravaCode, Provider, saveTokens, stravaDeauthorize } from './providers';
 import { syncAll, syncUser } from './sync';
 import { Env, getCookie, json, now, randomToken, redirect, setCookie, sha256Hex, User } from './util';
@@ -136,31 +137,88 @@ async function getRun(env: Env, user: User, id: number) {
   return { ...run, streams: JSON.parse(run.streams), songs: songs.results };
 }
 
-/** The latest songs and activities fetched, so it's visible that syncing works. */
+interface RecentPlay {
+  played_at: number;
+  track_id: string;
+  duration_s: number;
+  name: string;
+  artist: string;
+  image: string | null;
+}
+
+interface RecentActivity {
+  id: number;
+  name: string;
+  type: string;
+  start_time: number;
+  elapsed_s: number;
+  distance_m: number;
+  run_id: number | null;
+}
+
+/**
+ * The latest activities (of any type) and songs fetched. Each activity comes
+ * with the songs that were playing during it, and for how long.
+ */
 async function recent(env: Env, user: User) {
-  const songs = await env.DB.prepare(
-    `SELECT p.played_at, t.name, t.artist, t.image FROM plays p JOIN tracks t ON t.id = p.track_id
-     WHERE p.user_id = ? ORDER BY p.played_at DESC LIMIT 12`,
-  )
-    .bind(user.id)
-    .all();
-  let activities = await env.DB.prepare(
-    `SELECT a.name, a.type, a.start_time, a.distance_m,
-            (SELECT id FROM runs WHERE user_id = a.user_id AND strava_id = a.strava_id AND stream_state = 'ok') AS run_id
-     FROM activities a WHERE a.user_id = ? ORDER BY a.start_time DESC LIMIT 6`,
-  )
-    .bind(user.id)
-    .all();
-  if (!activities.results.length) {
-    // The demo account only has runs.
-    activities = await env.DB.prepare(
-      `SELECT name, 'Run' AS type, start_time, distance_m, id AS run_id FROM runs
-       WHERE user_id = ? AND stream_state = 'ok' ORDER BY start_time DESC LIMIT 6`,
+  let activities = (
+    await env.DB.prepare(
+      `SELECT a.strava_id AS id, a.name, a.type, a.start_time, a.elapsed_s, a.distance_m,
+              (SELECT id FROM runs WHERE user_id = a.user_id AND strava_id = a.strava_id AND stream_state = 'ok') AS run_id
+       FROM activities a WHERE a.user_id = ? ORDER BY a.start_time DESC LIMIT 8`,
     )
       .bind(user.id)
-      .all();
+      .all<RecentActivity>()
+  ).results;
+  if (!activities.length) {
+    // The demo account only has runs.
+    activities = (
+      await env.DB.prepare(
+        `SELECT strava_id AS id, name, 'Run' AS type, start_time, elapsed_s, distance_m, id AS run_id FROM runs
+         WHERE user_id = ? AND stream_state = 'ok' ORDER BY start_time DESC LIMIT 8`,
+      )
+        .bind(user.id)
+        .all<RecentActivity>()
+    ).results;
   }
-  return { songs: songs.results, activities: activities.results };
+
+  const playsBetween = async (from: number, to: number, limit: number) =>
+    (
+      await env.DB.prepare(
+        `SELECT p.played_at, p.track_id, t.duration_s, t.name, t.artist, t.image
+         FROM plays p JOIN tracks t ON t.id = p.track_id
+         WHERE p.user_id = ? AND p.played_at > ? AND p.played_at <= ? ORDER BY p.played_at DESC LIMIT ?`,
+      )
+        .bind(user.id, from, to, limit)
+        .all<RecentPlay>()
+    ).results;
+  const describe = (i: SongInterval<RecentPlay>, from = i.from, to = i.to) => ({
+    name: i.play.name,
+    artist: i.play.artist,
+    image: i.play.image,
+    from: Math.round(from),
+    to: Math.round(to),
+    skipped: i.skipped,
+  });
+
+  // One extra play bounds the start of the oldest song shown.
+  const songs = songIntervals(await playsBetween(0, now() + 60, 13))
+    .slice(-12)
+    .reverse()
+    .map((i) => describe(i));
+
+  const withSongs = [];
+  for (const a of activities) {
+    const end = a.start_time + a.elapsed_s;
+    const intervals = a.elapsed_s > 0 ? songIntervals(await playsBetween(a.start_time - 1800, end + 900, 200)) : [];
+    withSongs.push({
+      ...a,
+      songs: intervals
+        .filter((i) => Math.min(i.to, end) - Math.max(i.from, a.start_time) >= 10)
+        .map((i) => describe(i, Math.max(i.from, a.start_time), Math.min(i.to, end))),
+    });
+  }
+  return { songs, activities: withSongs };
 }
 
 async function handleStravaWebhook(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
