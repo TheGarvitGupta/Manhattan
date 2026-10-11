@@ -165,7 +165,7 @@ async function recent(env: Env, user: User) {
     await env.DB.prepare(
       `SELECT a.strava_id AS id, a.name, a.type, a.start_time, a.elapsed_s, a.distance_m,
               (SELECT id FROM runs WHERE user_id = a.user_id AND strava_id = a.strava_id AND stream_state = 'ok') AS run_id
-       FROM activities a WHERE a.user_id = ? ORDER BY a.start_time DESC LIMIT 8`,
+       FROM activities a WHERE a.user_id = ? ORDER BY a.start_time DESC LIMIT 20`,
     )
       .bind(user.id)
       .all<RecentActivity>()
@@ -202,8 +202,8 @@ async function recent(env: Env, user: User) {
   });
 
   // One extra play bounds the start of the oldest song shown.
-  const songs = songIntervals(await playsBetween(0, now() + 60, 13))
-    .slice(-12)
+  const songs = songIntervals(await playsBetween(0, now() + 60, 101))
+    .slice(-100)
     .reverse()
     .map((i) => describe(i));
 
