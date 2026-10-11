@@ -401,7 +401,9 @@ function story(ins, fmt) {
 						))),
 				)
 				: null,
-			songList('Long-run songs', 'These tend to be on when you go far.', ins.long_run.slice(0, 3), (r) => fmt.dist(r.run_m), () => 'typical run', (r) => bar(r.run_m / ins.long_run[0].run_m, 'var(--pace)')),
+			// Each song's slice of everything run since the data began: 4 km of 199 km is 2.0%.
+			songList('Share of your distance', `How much of your ${fmt.dist(t.distance_m)} each song played for.`, ins.furthest.slice(0, 3),
+				(r) => `${((r.distance_m / t.distance_m) * 100).toFixed(1)}%`, (r) => fmt.dist(r.distance_m)),
 		),
 	));
 	return out.filter(Boolean);
