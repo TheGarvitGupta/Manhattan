@@ -212,8 +212,29 @@ export async function syncUser(env: Env, userId: number, budget: Budget, opts: S
   await env.DB.prepare(`UPDATE users SET last_sync_at = ? WHERE id = ?`).bind(now(), userId).run();
 }
 
+/**
+ * The demo account's data would age out of the "last 7 days" view, so once a
+ * day it is slid forward by a whole number of days (keeping times of day).
+ */
+async function refreshDemo(env: Env): Promise<void> {
+  const demo = await env.DB.prepare(`SELECT id, last_sync_at FROM users WHERE is_demo = 1`).first<{ id: number; last_sync_at: number | null }>();
+  if (!demo?.last_sync_at) return;
+  const shift = Math.floor((now() - demo.last_sync_at) / DAY) * DAY;
+  if (shift <= 0) return;
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE runs SET start_time = start_time + ? WHERE user_id = ?`).bind(shift, demo.id),
+    env.DB.prepare(`UPDATE activities SET start_time = start_time + ? WHERE user_id = ?`).bind(shift, demo.id),
+    // played_at is part of the primary key: going via negatives avoids a row
+    // briefly colliding with one that hasn't moved yet.
+    env.DB.prepare(`UPDATE plays SET played_at = -(played_at + ?) WHERE user_id = ?`).bind(shift, demo.id),
+    env.DB.prepare(`UPDATE plays SET played_at = -played_at WHERE user_id = ? AND played_at < 0`).bind(demo.id),
+    env.DB.prepare(`UPDATE users SET last_sync_at = last_sync_at + ? WHERE id = ?`).bind(shift, demo.id),
+  ]);
+}
+
 /** Cron entry point: sync the users who have waited longest, within the request budget. */
 export async function syncAll(env: Env): Promise<void> {
+  await refreshDemo(env).catch((err) => console.error('refresh demo:', err));
   const budget: Budget = { n: 40 };
   const stravaEvery = Number(env.STRAVA_POLL_MINUTES ?? 30) * 60;
 

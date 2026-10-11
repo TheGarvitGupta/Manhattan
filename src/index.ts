@@ -170,7 +170,7 @@ const RECENT_DAYS = 7;
  */
 async function recent(env: Env, user: User) {
   const since = now() - RECENT_DAYS * 86400;
-  let activities = (
+  const activities = (
     await env.DB.prepare(
       `SELECT a.strava_id AS id, a.name, a.type, a.start_time, a.elapsed_s, a.distance_m,
               (SELECT id FROM runs WHERE user_id = a.user_id AND strava_id = a.strava_id AND stream_state = 'ok') AS run_id
@@ -179,17 +179,6 @@ async function recent(env: Env, user: User) {
       .bind(user.id, since)
       .all<RecentActivity>()
   ).results;
-  if (!activities.length) {
-    // The demo account only has runs.
-    activities = (
-      await env.DB.prepare(
-        `SELECT strava_id AS id, name, 'Run' AS type, start_time, elapsed_s, distance_m, id AS run_id FROM runs
-         WHERE user_id = ? AND stream_state = 'ok' AND start_time >= ? ORDER BY start_time DESC LIMIT 60`,
-      )
-        .bind(user.id, since)
-        .all<RecentActivity>()
-    ).results;
-  }
 
   const playsBetween = async (from: number, to: number, limit: number) =>
     (
