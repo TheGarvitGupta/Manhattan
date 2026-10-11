@@ -102,7 +102,7 @@ const button = (href: string, label: string) =>
      <a href="${esc(href)}" target="_blank" style="display:inline-block;padding:13px 22px;font:600 15px ${FONT};color:#ffffff;text-decoration:none;">${esc(label)}</a>
    </td></tr></table>`;
 
-function shell(title: string, body: string, preview: string, footer: string): string {
+function shell(title: string, body: string, preview: string, footer: string, app: string): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)}</title></head>
 <body style="margin:0;padding:0;background:#f4f3ef;">
@@ -111,7 +111,7 @@ function shell(title: string, body: string, preview: string, footer: string): st
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;">
     <tr><td style="padding:26px 30px 0;">
       <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-        <td width="26" height="26" align="center" style="border-radius:7px;background:${ACCENT};font:700 14px/26px ${FONT};color:#ffffff;">&#9834;</td>
+        <td width="28" height="28"><img src="${esc(app)}logo.png" width="28" height="28" alt="" style="display:block;border-radius:7px;border:0;"></td>
         <td style="padding-left:9px;font:600 17px ${FONT};color:${INK};">Cadence</td>
       </tr></table>
     </td></tr>
@@ -182,7 +182,7 @@ ${table(
   return {
     subject: 'Welcome to Cadence',
     preview: 'Confirm your email, then just run with music on.',
-    html: shell('Welcome to Cadence', body, 'Confirm your email, then just run with music on.', `You're getting this because you turned on email updates in Cadence. <a href="${esc(l.off)}" style="color:${MUTED};">Turn them off</a>.`),
+    html: shell('Welcome to Cadence', body, 'Confirm your email, then just run with music on.', `You're getting this because you turned on email updates in Cadence. <a href="${esc(l.off)}" style="color:${MUTED};">Turn them off</a>.`, l.app),
     text: `You're in, ${firstName(user)}.\n\nConfirm your email: ${l.confirm}\n\nWhat happens next: run with music on. After ${RUNS_NEEDED} runs your fastest and slowest songs appear, and a short roundup arrives every Sunday at 9am.\n\nOpen Cadence: ${l.app}\nTurn these emails off: ${l.off}`,
   };
 }
@@ -268,7 +268,7 @@ ${button(l.app, 'Open Cadence')}`;
     return {
       subject,
       preview: weekLine,
-      html: shell(subject, body, weekLine, footer),
+      html: shell(subject, body, weekLine, footer, l.app),
       text: `${subject}\n\n${weekLine}\n\nLast songs:\n${songs.map((s) => `- ${s.name} · ${s.artist}`).join('\n')}\n\nLast activities:\n${activities.map((a) => `- ${a.name} (${kind(a.type)})`).join('\n')}\n\nOpen Cadence: ${l.app}\nTurn these emails off: ${l.off}`,
     };
   }
@@ -303,7 +303,7 @@ ${button(l.app, 'See everything')}
   return {
     subject,
     preview: `${u.pace(top.speed)}, ${u.gap(top.speed, average)}. ${weekLine}`,
-    html: shell(subject, body, `${u.pace(top.speed)}, ${u.gap(top.speed, average)}. ${weekLine}`, footer),
+    html: shell(subject, body, `${u.pace(top.speed)}, ${u.gap(top.speed, average)}. ${weekLine}`, footer, l.app),
     text: `You run fastest to ${top.name} by ${top.artist}: ${u.pace(top.speed)}, ${u.gap(top.speed, average)}.\n\n${weekLine}\n\nFastest songs:\n${ins.fastest.slice(0, 3).map((s) => `- ${s.name}: ${u.pace(s.speed)}`).join('\n')}\n\nSee everything: ${l.app}\nTurn these emails off: ${l.off}`,
   };
 }

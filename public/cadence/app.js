@@ -4,7 +4,13 @@ import { activityChart, h, hideTip, minSec, runChart, s as svg, spectrum, stretc
 const app = document.getElementById('app');
 const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null, emailScenario: 'patterns' };
 
-// Units follow the person's Strava setting unless they pick one here.
+// Units: what the person picks here, else their Strava setting when Strava
+// shares it, else a guess from where their browser says they are.
+const MILE_REGIONS = ['US', 'GB', 'LR', 'MM'];
+try {
+	const region = new Intl.Locale(navigator.language).maximize().region;
+	if (MILE_REGIONS.includes(region)) state.units = 'mi';
+} catch {}
 let unitsChosen = false;
 try {
 	const saved = localStorage.getItem('cadence-units');
@@ -256,7 +262,7 @@ function paintStatus() {
 	const chip = (key, label) => {
 		const c = me[key];
 		const good = c.connected && c.ok;
-		const text = me.user.is_demo ? 'sample data' : !c.connected ? 'not connected' : !good ? 'needs reconnecting' : c.last_sync_at ? `checked ${agoShort(c.last_sync_at)}` : 'first check pending';
+		const text = me.user.is_demo ? 'sample data' : !c.connected ? 'not connected' : !good ? 'needs reconnecting' : c.last_sync_at ? `checked ${agoShort(c.last_sync_at)}` : 'checking soon';
 		return h('span', { class: `chip${good ? '' : ' bad'}`, title: `${label}: ${good ? 'connected' : 'not connected'}` },
 			svg('svg', { class: `mark ${key}`, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: MARKS[key] })),
 			h('b', null, label),
