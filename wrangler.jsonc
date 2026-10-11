@@ -1,0 +1,34 @@
+{
+  "name": "cadence",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  // Served as part of the main site: www.garvitgupta.com/cadence
+  "routes": [{ "pattern": "www.garvitgupta.com/cadence*", "zone_name": "garvitgupta.com" }],
+  "workers_dev": false,
+  "assets": {
+    // Files live in public/cadence/ so their URLs match the route above.
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/cadence/api/*", "/cadence/auth/*", "/cadence/webhooks/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cadence",
+      // Replace with the id printed by `npx wrangler d1 create cadence`
+      "database_id": "72148869-98c6-4eae-9a03-2dbce8c07810",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Background sync: Spotify only keeps your last 50 tracks, so poll often.
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "vars": {
+    // Must match the route path and the folder name under public/.
+    "BASE_PATH": "/cadence",
+    "STRAVA_CLIENT_ID": "38171",
+    "SPOTIFY_CLIENT_ID": "8bff943da02b4f409395f371441b3990",
+    // How often the cron polls Strava per user. Raise to 360 once the webhook is set up.
+    "STRAVA_POLL_MINUTES": "30"
+  },
+  "observability": { "enabled": true }
+}

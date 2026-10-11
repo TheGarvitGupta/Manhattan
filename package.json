@@ -1,0 +1,24 @@
+{
+  "name": "cadence",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --ip 127.0.0.1 --port 8787 --local-upstream 127.0.0.1:8787 --test-scheduled",
+    "db:migrate": "wrangler d1 migrations apply cadence --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cadence --remote",
+    "simulate": "tsx scripts/simulate.ts",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5",
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5",
+    "wrangler": "^4"
+  },
+  "allowScripts": {
+    "workerd@1.20261006.1": true,
+    "esbuild@0.28.2": true
+  }
+}

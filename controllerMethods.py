@@ -35,6 +35,16 @@ from authorizationRequests import spotifyRecentlyPlayedRequest
 from authorizationRequests import stravaListAthleteActivitiesRequest
 from authorizationRequests import stravaGetActivityRequest
 
+def compress(value):
+	# Accepts str or bytes (Python 3)
+	if isinstance(value, str):
+		value = value.encode("utf-8")
+	return zlib.compress(value)
+
+def decompress(value):
+	# Returns str so callers can treat columns as text (Python 3)
+	return zlib.decompress(value).decode("utf-8")
+
 def applicationStatistics():
 	stats = {}
 	stats["Users"] = 0
@@ -101,14 +111,14 @@ def createUserSQL(username, user_id, profile_picture, city, state, country, firs
 	# Insert the record to the table
 	try:
 		cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
-			sqlite3.Binary(zlib.compress(username)), 
-			sqlite3.Binary(zlib.compress(user_id)), 
-			sqlite3.Binary(zlib.compress(profile_picture)), 
-			sqlite3.Binary(zlib.compress(city)), 
-			sqlite3.Binary(zlib.compress(state)), 
-			sqlite3.Binary(zlib.compress(country)), 
-			sqlite3.Binary(zlib.compress(firstname)), 
-			sqlite3.Binary(zlib.compress(lastname))))
+			sqlite3.Binary(compress(username)), 
+			sqlite3.Binary(compress(user_id)), 
+			sqlite3.Binary(compress(profile_picture)), 
+			sqlite3.Binary(compress(city)), 
+			sqlite3.Binary(compress(state)), 
+			sqlite3.Binary(compress(country)), 
+			sqlite3.Binary(compress(firstname)), 
+			sqlite3.Binary(compress(lastname))))
 		connection.commit()
 	except sqlite3.Error as error:
 		print(log_time_string() + "Error: " + error.args[0])
@@ -130,11 +140,11 @@ def updateStravaCodesSQL(user_id, strava_access_token, strava_refresh_token, str
 	# Insert the record to the table
 	try:
 		cursor.execute("UPDATE stravaCodes SET access_token = ?, refresh_token = ?, last_update = ?, access_token_validity = ? WHERE user_id = ?", (
-			sqlite3.Binary(zlib.compress(strava_access_token)), 
-			sqlite3.Binary(zlib.compress(strava_refresh_token)), 
-			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
-			sqlite3.Binary(zlib.compress(str(strava_access_token_validity))),
-			sqlite3.Binary(zlib.compress(str(user_id)))))
+			sqlite3.Binary(compress(strava_access_token)), 
+			sqlite3.Binary(compress(strava_refresh_token)), 
+			sqlite3.Binary(compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
+			sqlite3.Binary(compress(str(strava_access_token_validity))),
+			sqlite3.Binary(compress(str(user_id)))))
 		connection.commit()
 	except sqlite3.Error as error:
 		print(log_time_string() + "Error: " + error.args[0])
@@ -168,11 +178,11 @@ def writeStravaCodesSQL(user_id, strava_access_token, strava_refresh_token, stra
 	# Insert the record to the table
 	try:
 		cursor.execute("INSERT INTO stravaCodes VALUES (?, ?, ?, ?, ?)", (
-			sqlite3.Binary(zlib.compress(user_id)), 
-			sqlite3.Binary(zlib.compress(strava_access_token)), 
-			sqlite3.Binary(zlib.compress(strava_refresh_token)),
-			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
-			sqlite3.Binary(zlib.compress(str(strava_access_token_validity)))))
+			sqlite3.Binary(compress(user_id)), 
+			sqlite3.Binary(compress(strava_access_token)), 
+			sqlite3.Binary(compress(strava_refresh_token)),
+			sqlite3.Binary(compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
+			sqlite3.Binary(compress(str(strava_access_token_validity)))))
 		connection.commit()
 	except sqlite3.Error as error:
 		print(log_time_string() + "Error: " + error.args[0])
@@ -192,10 +202,10 @@ def updateSpotifyCodesSQL(user_id, spotify_access_token, spotify_access_token_va
 	# Insert the record to the table
 	try:
 		cursor.execute("UPDATE spotifyCodes SET access_token = ?, last_update = ?, access_token_validity = ? WHERE user_id = ?", (
-			sqlite3.Binary(zlib.compress(spotify_access_token)),
-			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
-			sqlite3.Binary(zlib.compress(str(spotify_access_token_validity))),
-			sqlite3.Binary(zlib.compress(str(user_id)))))
+			sqlite3.Binary(compress(spotify_access_token)),
+			sqlite3.Binary(compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
+			sqlite3.Binary(compress(str(spotify_access_token_validity))),
+			sqlite3.Binary(compress(str(user_id)))))
 		connection.commit()
 	except sqlite3.Error as error:
 		print(log_time_string() + "Error: " + error.args[0])
@@ -229,11 +239,11 @@ def writeSpotifyCodesSQL(user_id, spotify_access_token, spotify_refresh_token, s
 	# Insert the record to the table
 	try:
 		cursor.execute("INSERT INTO spotifyCodes VALUES (?, ?, ?, ?, ?)", (
-			sqlite3.Binary(zlib.compress(user_id)), 
-			sqlite3.Binary(zlib.compress(spotify_access_token)), 
-			sqlite3.Binary(zlib.compress(spotify_refresh_token)),
-			sqlite3.Binary(zlib.compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
-			sqlite3.Binary(zlib.compress(str(spotify_access_token_validity)))))
+			sqlite3.Binary(compress(user_id)), 
+			sqlite3.Binary(compress(spotify_access_token)), 
+			sqlite3.Binary(compress(spotify_refresh_token)),
+			sqlite3.Binary(compress(time.strftime('%Y-%m-%d %H:%M:%S'))),
+			sqlite3.Binary(compress(str(spotify_access_token_validity)))))
 		connection.commit()
 	except sqlite3.Error as error:
 		print(log_time_string() + "Error: " + error.args[0])
@@ -283,7 +293,7 @@ def refreshSpotifyTokens():
 		
 		properties = {}
 		for value, column in zip(row, names):
-			properties[column] = zlib.decompress(value)
+			properties[column] = decompress(value)
 		
 		access_token = properties['access_token']
 		refresh_token = properties['refresh_token']
@@ -332,7 +342,7 @@ def refreshStravaTokens():
 		
 		properties = {}
 		for value, column in zip(row, names):
-			properties[column] = zlib.decompress(value)
+			properties[column] = decompress(value)
 		
 		access_token = properties['access_token']
 		refresh_token = properties['refresh_token']
@@ -426,12 +436,12 @@ def writeStravaActivitiesSQL(user_id, activity_id, activity_name, activity_start
 	# Insert the record to the table
 	try:
 		cursor.execute("INSERT INTO stravaActivities VALUES (?, ?, ?, ?, ?, ?)", (
-			sqlite3.Binary(zlib.compress(user_id.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(activity_id.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(activity_name.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(activity_start_date_local.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(activity_average_speed.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(activity_type.encode("utf-8")))))
+			sqlite3.Binary(compress(user_id.encode("utf-8"))), 
+			sqlite3.Binary(compress(activity_id.encode("utf-8"))), 
+			sqlite3.Binary(compress(activity_name.encode("utf-8"))), 
+			sqlite3.Binary(compress(activity_start_date_local.encode("utf-8"))), 
+			sqlite3.Binary(compress(activity_average_speed.encode("utf-8"))), 
+			sqlite3.Binary(compress(activity_type.encode("utf-8")))))
 		connection.commit()
 		print(log_time_string() + "Inserted " + activity_name + " for user " + user_id + " into the stravaActivities table.")
 	except sqlite3.Error as error:
@@ -507,14 +517,14 @@ def writeStravaDetailedActivitySQL(result):
 	# Insert the record to the table
 	try:
 		cursor.execute("INSERT INTO stravaDetailedActivities VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
-			sqlite3.Binary(zlib.compress(str(activity_id).encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress((time.strftime('%Y-%m-%dT%H:%M:%SZ', activity_start_date_local)).encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(activity_type.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(str(activity_average_speed).encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(str(activity_distance).encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(activity_split_speeds_string.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(activity_split_hearts_string.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(activity_split_start_dates_local.encode("utf-8")))))
+			sqlite3.Binary(compress(str(activity_id).encode("utf-8"))), 
+			sqlite3.Binary(compress((time.strftime('%Y-%m-%dT%H:%M:%SZ', activity_start_date_local)).encode("utf-8"))), 
+			sqlite3.Binary(compress(activity_type.encode("utf-8"))), 
+			sqlite3.Binary(compress(str(activity_average_speed).encode("utf-8"))), 
+			sqlite3.Binary(compress(str(activity_distance).encode("utf-8"))), 
+			sqlite3.Binary(compress(activity_split_speeds_string.encode("utf-8"))), 
+			sqlite3.Binary(compress(activity_split_hearts_string.encode("utf-8"))), 
+			sqlite3.Binary(compress(activity_split_start_dates_local.encode("utf-8")))))
 		connection.commit()
 		print(log_time_string() + "Inserted " + str(activity_id) + " into the stravaDetailedActivities table.")
 	except sqlite3.Error as error:
@@ -558,13 +568,13 @@ def writeSpotifyTracksSQL(user_id, track_id, track_name, album_name, album_artis
 	# Insert the record to the table
 	try:
 		cursor.execute("INSERT INTO spotifyTracks VALUES (?, ?, ?, ?, ?, ?, ?)", (
-			sqlite3.Binary(zlib.compress(user_id.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(track_id.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(track_name.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(album_name.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(album_artist.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(album_image.encode("utf-8"))), 
-			sqlite3.Binary(zlib.compress(played_at.encode("utf-8")))))
+			sqlite3.Binary(compress(user_id.encode("utf-8"))), 
+			sqlite3.Binary(compress(track_id.encode("utf-8"))), 
+			sqlite3.Binary(compress(track_name.encode("utf-8"))), 
+			sqlite3.Binary(compress(album_name.encode("utf-8"))), 
+			sqlite3.Binary(compress(album_artist.encode("utf-8"))), 
+			sqlite3.Binary(compress(album_image.encode("utf-8"))), 
+			sqlite3.Binary(compress(played_at.encode("utf-8")))))
 		connection.commit()
 		print(log_time_string() + "Inserted " + track_name + " for user " + user_id + " into the spotifyTracks table.")
 	except sqlite3.Error as error:
@@ -596,7 +606,7 @@ def spotifyDownloadThreadFunction():
 			
 			properties = {}
 			for value, column in zip(row, names):
-				properties[column] = zlib.decompress(value)
+				properties[column] = decompress(value)
 			
 			user_id = properties['user_id']
 			access_token = properties['access_token']
@@ -644,7 +654,7 @@ def stravaDownloadThreadFunction():
 		
 		properties = {}
 		for value, column in zip(row, names):
-			properties[column] = zlib.decompress(value)
+			properties[column] = decompress(value)
 		
 		user_id = properties['user_id']
 		access_token = properties['access_token']
@@ -688,7 +698,7 @@ def stravaDetailedActivityDownloadThreadFunction():
 			
 			properties = {}
 			for value, column in zip(row, names):
-				properties[column] = zlib.decompress(value)
+				properties[column] = decompress(value)
 			
 			user_id = properties['user_id']
 			activity_id = properties['activity_id']
@@ -726,13 +736,13 @@ def getStravaAccessTokenForUserID(user_id):
 
 	# Extract access_token for the given user_id
 	try:
-		rows = cursor.execute("SELECT * FROM stravaCodes WHERE user_id = ?", (sqlite3.Binary(zlib.compress(user_id)),)).fetchall()
+		rows = cursor.execute("SELECT * FROM stravaCodes WHERE user_id = ?", (sqlite3.Binary(compress(user_id)),)).fetchall()
 		names = [description[0] for description in cursor.description]
 
 		for row in rows:			
 			properties = {}
 			for value, column in zip(row, names):
-				properties[column] = zlib.decompress(value)
+				properties[column] = decompress(value)
 				
 			access_token = properties['access_token']
 			return access_token
@@ -809,7 +819,7 @@ def databaseView():
 			htmlOutput.append("<tr class='mdc-data-table__row'>")
 			for cell in row:
 				htmlOutput.append("<td class='mdc-data-table__cell'>")
-				htmlOutput.append(zlib.decompress(cell))
+				htmlOutput.append(decompress(cell))
 				htmlOutput.append("</td>")
 			htmlOutput.append("</tr>")
 		htmlOutput.append("</tbody>")			
@@ -890,7 +900,7 @@ def performanceView():
 		
 		properties = {}
 		for value, column in zip(row, names):
-			properties[column] = zlib.decompress(value)
+			properties[column] = decompress(value)
 		
 		# print(properties)
 
@@ -1076,7 +1086,7 @@ def getSongBetween(start_time, end_time):
 	for row in rows:
 		properties = {}
 		for value, column in zip(row, names):
-			properties[column] = zlib.decompress(value)
+			properties[column] = decompress(value)
 
 		# Add 5 hours to convert to PDT
 		played_at = properties['played_at']

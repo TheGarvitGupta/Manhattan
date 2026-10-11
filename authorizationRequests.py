@@ -10,7 +10,7 @@ from globalParams import kSpotifyClientID
 from privateParams import kStravaClientSecret
 from privateParams import kSpotifyClientSecret
 
-from urllib import urlencode
+from urllib.parse import urlencode
 import base64
 
 def stravaAuthorizeRequest():
@@ -88,7 +88,7 @@ def stravaTokenHeadersBearer(access_token):
 
 def spotifyTokenHeadersBasic():
 	headers = {}
-	headers["Authorization"] = "Basic " + base64.b64encode("" + kSpotifyClientID + ":" + kSpotifyClientSecret, altchars=None)
+	headers["Authorization"] = "Basic " + base64.b64encode((kSpotifyClientID + ":" + kSpotifyClientSecret).encode("utf-8")).decode("ascii")
 	return headers
 
 def spotifyTokenHeadersBearer(access_token):

@@ -1,0 +1,8 @@
+# Copy to .dev.vars for local development. In production these are set with
+# `npx wrangler secret put <NAME>`.
+STRAVA_CLIENT_SECRET=
+SPOTIFY_CLIENT_SECRET=
+# Any long random string; encrypts stored OAuth tokens.
+TOKEN_KEY=
+# Any string you choose; must match the one used when creating the Strava webhook.
+STRAVA_VERIFY_TOKEN=
