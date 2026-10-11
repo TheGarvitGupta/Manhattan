@@ -143,8 +143,6 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .chart .hr { fill: none; stroke: var(--heart); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart .cross { stroke: var(--ink-2); stroke-width: 1; }
 .chart .dot { stroke: var(--surface); stroke-width: 2; }
-.chart .pt { fill: var(--pace); stroke: var(--surface); stroke-width: 2; }
-.chart .pt.on { stroke: var(--ink); }
 .chart .hit { fill: transparent; cursor: crosshair; }
 .chart .hit.link { cursor: pointer; }
 

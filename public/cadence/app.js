@@ -1,4 +1,4 @@
-import { activityChart, changesChart, h, hideTip, minSec, runChart, stretchStats, weekBars } from './charts.js';
+import { activityChart, h, hideTip, minSec, runChart, stretchStats, weekBars } from './charts.js';
 
 const app = document.getElementById('app');
 const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null };
@@ -437,20 +437,6 @@ function dashboard() {
 		h('p', { class: 'sub' }, 'Hover a song for its artist.'),
 		songCards(ins, fmt),
 	));
-
-	if (ins.changes) {
-		const byId = new Map(runs.map((r) => [r.id, r]));
-		const box = h('div', { class: 'chart' });
-		page.append(h('section', null,
-			h('h2', null, 'Song changes and distance'),
-			h('p', { class: 'sub' }, 'One dot per run. Further right means the song changed more often.'),
-			h('div', { class: 'card' }, box),
-		));
-		changesChart(box, ins.changes.points, fmt, (p) => {
-			const r = byId.get(p.run_id);
-			return r ? `${r.name} · ${day(r.start_time)}` : 'Run';
-		}, (p) => (location.hash = `#/run/${p.run_id}`));
-	}
 
 	page.append(h('section', null,
 		h('h2', null, 'Runs'),
