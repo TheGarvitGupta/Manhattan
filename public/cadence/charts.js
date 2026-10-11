@@ -407,7 +407,12 @@ function measures(st, isRun, fmt) {
 		const k = isRun ? 2 : 1;
 		out.push({ title: isRun ? 'Cadence, steps/min' : 'Cadence, rpm', color: 'var(--cadence)', values: smooth(st.c, 2).map((v) => (v == null ? null : v * k)), tick: (v) => v, tip: (v) => [Math.round(v), isRun ? 'spm' : 'rpm'] });
 	}
-	if (any(st.a)) out.push({ title: 'Elevation, m', color: 'var(--muted)', values: st.a, tick: (v) => v, tip: (v) => [Math.round(v), 'm'] });
+	if (any(st.a)) {
+		// Feet alongside miles, metres alongside kilometres.
+		const feet = fmt.unit === 'mi';
+		const values = feet ? st.a.map((v) => (v == null ? null : v * 3.28084)) : st.a;
+		out.push({ title: `Elevation, ${feet ? 'ft' : 'm'}`, color: 'var(--muted)', values, tick: (v) => v, tip: (v) => [Math.round(v), feet ? 'ft' : 'm'] });
+	}
 
 	for (const m of out) {
 		const sorted = m.values.filter((v) => v != null).sort((a, b) => a - b);
