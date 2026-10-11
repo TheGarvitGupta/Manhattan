@@ -542,8 +542,6 @@ export function spectrum(container, items, o) {
 		root.append(h('span', { class: 'end', style: { left: '0', top: `${base + 14}px` } }, o.left), h('span', { class: 'end', style: { right: '0', top: `${base + 14}px` } }, o.right));
 
 		for (const { item, px, lane } of placed) {
-			// A short tick on the line marks exactly where this song sits, however high its cover is stacked.
-			root.append(h('i', { class: 'tick', style: { left: `${px}px`, top: `${base}px` } }));
 			const cover = h('button', { class: 'cover', type: 'button', 'aria-label': `${item.name}, ${o.describe(item)}`, style: { left: `${px - size / 2}px`, top: `${base - (lane + 1) * gap}px`, width: `${size}px`, height: `${size}px` } },
 				item.image ? h('img', { src: item.image, alt: '', referrerpolicy: 'no-referrer' }) : (item.name || '?')[0]);
 			const tipFor = (evt) => showTip(evt, [h('div', { class: 'r' }, h('b', null, item.name)), h('div', { class: 't' }, item.artist), h('div', { class: 't' }, o.describe(item))]);
