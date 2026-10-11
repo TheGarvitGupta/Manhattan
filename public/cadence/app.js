@@ -264,7 +264,6 @@ function songCards(ins, fmt) {
 		mini('Heart-rate calmers', ins.heart.low, heart),
 		mini('Most skipped', ins.skips.most, { amount: (r) => r.rate, value: (r) => `${r.skipped} of ${r.plays}`, range: [0, 1], color: 'var(--slower)', ends: ['never', 'always'] }),
 		mini('Never skipped', ins.skips.least.filter((r) => r.skipped === 0), { amount: (r) => r.plays, value: (r) => `${r.plays}×`, color: BLUE }),
-		mini('Top artists', ins.top_artists, { amount: (r) => r.moving_s, value: (r) => duration(r.moving_s), name: (r) => r.artist, plain: true, color: BLUE }),
 		mini('Time of day', parts, { amount: (r) => r.speed, value: (r) => fmt.pace(r.speed).split(' ')[0], range: parts.length ? span(parts.map((p) => p.speed), 0.3) : null, plain: true, color: BLUE, ends: ['slower', 'faster'] }),
 		ins.opener ? feature('Your opener', ins.opener.image, ins.opener.name, ins.opener.name, `starts ${plural(ins.opener.count, 'run')}`) : null,
 		km ? feature('Fastest kilometre', km.song && km.song.image, km.song ? km.song.name : '♪', minSec(km.seconds), `${km.song ? km.song.name : 'no music'} · ${day(km.start_time)}`, `#/run/${km.run_id}`) : null,
