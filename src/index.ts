@@ -72,6 +72,12 @@ async function stravaCallback(req: Request, env: Env, ctx: ExecutionContext): Pr
     .bind(t.athlete.id, name, t.athlete.profile_medium ?? null, now())
     .first<{ id: number }>();
   await saveTokens(env, user!.id, 'strava', t);
+  // Permissions may have changed, so fetch the past week's detailed data afresh.
+  await env.DB.prepare(
+    `UPDATE activities SET stream_state = 'pending', stream_tries = 0 WHERE user_id = ? AND start_time > ?`,
+  )
+    .bind(user!.id, now() - 7 * 86400)
+    .run();
   ctx.waitUntil(syncUser(env, user!.id, { n: 20 }, { strava: true }).catch(console.error));
   return redirect(`${env.BASE_PATH}/`, [await startSession(req, env, user!.id), setCookie(req, env, STATE_COOKIE, '', 0)]);
 }

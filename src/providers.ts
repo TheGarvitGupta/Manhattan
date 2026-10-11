@@ -5,10 +5,11 @@ import type { RawStreams } from './match';
 
 export type Provider = 'strava' | 'spotify';
 
-// Strava: profile + activities visible to Everyone or Followers ("Only You"
-// activities are left out). This is also the least the main site's Strava
-// widget needs on the same app. Spotify: listening history.
-const STRAVA_SCOPE = 'read,activity:read';
+// Strava: profile + activities. `activity:read_all` is needed for complete
+// data: with plain `activity:read`, Strava cuts out the stretches of every
+// activity that fall inside the athlete's hidden start/end zones.
+// Spotify: listening history.
+const STRAVA_SCOPE = 'read,activity:read_all';
 const SPOTIFY_SCOPE = 'user-read-recently-played';
 
 export const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
