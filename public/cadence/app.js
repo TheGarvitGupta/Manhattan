@@ -30,7 +30,6 @@ const duration = (sec) => {
 	return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
 };
 const percent = (rel) => `${Math.abs(rel * 100).toFixed(1)}%`;
-const signed = (rel) => (Math.abs(rel) < 0.0005 ? '0.0%' : `${rel > 0 ? '+' : '−'}${percent(rel)}`);
 const versus = (rel) => (Math.abs(rel) < 0.0005 ? 'Same' : `${percent(rel)} ${rel > 0 ? 'faster' : 'slower'}`);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const day = (ts, long) =>
@@ -177,43 +176,6 @@ function notices() {
 
 function tile(label, value, unit) {
 	return h('div', { class: 'card tile' }, h('div', { class: 'label' }, label), h('div', { class: 'value' }, value, unit && h('span', { class: 'unit' }, unit)));
-}
-
-function finding(kicker, title, detail, image) {
-	return h('div', { class: 'card finding' }, image, h('div', null, h('div', { class: 'kicker' }, kicker), h('h3', null, title), h('p', null, detail)));
-}
-
-const SAME = 0.004; // under 0.4% is "about the same"
-
-function findings(ins, fmt) {
-	const out = [];
-	if (ins.changes) {
-		const { few, many } = ins.changes;
-		const longer = few.distance_m >= many.distance_m ? few : many;
-		out.push(finding('Distance', longer === few ? 'You run longest when you let songs play' : 'You run longest when you keep changing songs',
-			`${fmt.dist(few.distance_m)} on average when songs change least, ${fmt.dist(many.distance_m)} when they change most. ${plural(few.n + many.n, 'run')}.`));
-		const rel = many.speed / few.speed - 1;
-		out.push(finding('Pace', Math.abs(rel) < SAME ? 'Changing songs doesn’t change your pace' : rel > 0 ? 'You run faster when songs change often' : 'You run faster when you let songs play',
-			`${fmt.pace(many.speed)} when songs change most, ${fmt.pace(few.speed)} when they change least.`));
-	}
-	if (ins.music) {
-		const rel = ins.music.with.speed / ins.music.without.speed - 1;
-		out.push(finding('Music or silence', Math.abs(rel) < SAME ? 'Music makes no difference to your pace' : `You run ${percent(rel)} ${rel > 0 ? 'faster' : 'slower'} with music`,
-			`${fmt.pace(ins.music.with.speed)} with music (${plural(ins.music.with.n, 'run')}), ${fmt.pace(ins.music.without.speed)} without (${plural(ins.music.without.n, 'run')}).`));
-	}
-	if (ins.familiarity) {
-		const { fresh, familiar } = ins.familiarity;
-		const diff = familiar.rel - fresh.rel;
-		out.push(finding('Old favourites', Math.abs(diff) < SAME ? 'New songs and old favourites pace you the same' : diff > 0 ? 'You run faster to songs you know' : 'New songs speed you up',
-			`Songs you've run to before: ${signed(familiar.rel)} against your run average. First-time songs: ${signed(fresh.rel)}.`));
-	}
-	if (ins.skipping) {
-		const { skipped, played } = ins.skipping;
-		const diff = skipped.rel - played.rel;
-		out.push(finding('Skips', Math.abs(diff) < SAME ? 'Skipping a song doesn’t change your pace' : diff < 0 ? 'You skip the songs that slow you down' : 'You speed up for songs you end up skipping',
-			`Songs you cut short: ${signed(skipped.rel)} against your run average. Songs you let finish: ${signed(played.rel)}.`));
-	}
-	return out;
 }
 
 /**
@@ -475,14 +437,6 @@ function dashboard() {
 		h('p', { class: 'sub' }, 'Hover a song for its artist.'),
 		songCards(ins, fmt),
 	));
-
-	const found = findings(ins, fmt);
-	page.append(h('section', null,
-		h('h2', null, 'Patterns'),
-		h('p', { class: 'sub' }, found.length ? 'Compared with the pace of the run each song played on.' : 'Not enough runs with music yet.'),
-		h('div', { class: 'findings' }, found),
-	));
-
 
 	if (ins.changes) {
 		const byId = new Map(runs.map((r) => [r.id, r]));
