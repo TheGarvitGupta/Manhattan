@@ -251,6 +251,7 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .list .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .list .num b { display: block; font-weight: 650; font-size: 16px; letter-spacing: -0.01em; }
 .list .num span { display: block; color: var(--muted); font-size: 12px; }
+.num b small, .day-parts b small { font-size: 0.68em; font-weight: 500; color: var(--ink-2); letter-spacing: 0; }
 .arrow { font-style: normal; font-size: 9px; margin-right: 4px; vertical-align: 1px; }
 .arrow.up { color: var(--up); }
 .arrow.down { color: var(--muted); }

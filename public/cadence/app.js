@@ -237,10 +237,16 @@ function statusBar() {
 
 // --- dashboard pieces -------------------------------------------------------------------------
 
-/** "28 s/km faster": a song's pace against the person's overall average. */
+/** "28s faster": a song's pace against the person's overall average, per km or mile. */
 function paceGap(speed, average, fmt) {
 	const sec = Math.round(fmt.unitMeters / average - fmt.unitMeters / speed);
-	return sec === 0 ? 'your usual pace' : `${Math.abs(sec)} s/${fmt.unit} ${sec > 0 ? 'faster' : 'slower'}`;
+	return sec === 0 ? 'your usual pace' : `${Math.abs(sec)}s ${sec > 0 ? 'faster' : 'slower'}`;
+}
+
+/** A pace with its unit always attached, the unit set smaller: 9:03 /mi. */
+function paceValue(speed, fmt) {
+	const [time, unit] = fmt.pace(speed).split(' ');
+	return [time, h('small', null, ` ${unit}`)];
 }
 
 /** The same, led by an arrow: coloured and up when faster, grey and down when slower. */
@@ -315,7 +321,7 @@ function story(ins, fmt) {
 		spectrum(box, paced.map((r) => ({ ...r, value: r.speed })), {
 			range: span([...paced.map((r) => r.speed), average]),
 			avg: average,
-			avgLabel: `your average ${fmt.pace(average).split(' ')[0]}`,
+			avgLabel: `your average ${fmt.pace(average)}`,
 			left: 'slower',
 			right: 'faster',
 			describe: (r) => `${fmt.pace(r.speed)} · ${paceGap(r.speed, average, fmt)}`,
@@ -323,8 +329,8 @@ function story(ins, fmt) {
 		out.push(section('Fastest and slowest songs', 'Each cover sits at the pace you ran while it played.',
 			h('div', { class: 'card' }, box),
 			h('div', { class: 'pair' },
-				songList('Fastest', 'You run quickest to these.', ins.fastest, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceArrow(r.speed, average, fmt)),
-				songList('Slowest', 'You run slowest to these.', ins.slowest, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceArrow(r.speed, average, fmt)),
+				songList('Fastest', 'You run quickest to these.', ins.fastest, (r) => paceValue(r.speed, fmt), (r) => paceArrow(r.speed, average, fmt)),
+				songList('Slowest', 'You run slowest to these.', ins.slowest, (r) => paceValue(r.speed, fmt), (r) => paceArrow(r.speed, average, fmt)),
 			),
 		));
 	}
@@ -337,7 +343,7 @@ function story(ins, fmt) {
 	out.push(section('On repeat', 'What you play most while you run.',
 		h('div', { class: 'pair' },
 			songList('Most played', 'How many times each came up on a run.', ins.most_played, (r) => `${r.plays}×`, (r) => `on ${plural(r.runs, 'run')}`, (r) => bar(r.plays / mostPlays, 'var(--pace)')),
-			songList('New this month', 'First heard on a run in the last 30 days.', ins.new_this_month, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceArrow(r.speed, average, fmt)),
+			songList('New this month', 'First heard on a run in the last 30 days.', ins.new_this_month, (r) => paceValue(r.speed, fmt), (r) => paceArrow(r.speed, average, fmt)),
 		),
 		h('div', { class: 'pair' },
 			ins.opener ? fact('Your opener', 'The song you start runs with most.', ins.opener.image, ins.opener.name, ins.opener.name, `${ins.opener.artist} · started ${plural(ins.opener.count, 'run')}`) : null,
@@ -396,7 +402,7 @@ function story(ins, fmt) {
 					h('div', { class: 'day-parts' }, parts.map((p) =>
 						h('div', { class: p.speed === quickest ? 'best' : null },
 							h('span', null, p.name),
-							h('b', null, fmt.pace(p.speed).split(' ')[0]),
+							h('b', null, paceValue(p.speed, fmt)),
 							h('span', null, p.speed === quickest ? `fastest · ${plural(p.n, 'run')}` : plural(p.n, 'run')),
 						))),
 				)
