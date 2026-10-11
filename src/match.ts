@@ -179,17 +179,19 @@ export function matchSongs(startTime: number, s: Streams, plays: Play[]): RunSon
   return songs;
 }
 
-/** The fastest single kilometre in a run: how long it took, and when it began (seconds in). */
-export function bestKm(s: Streams): { seconds: number; at: number } | null {
+export const MILE_M = 1609.344;
+
+/** The fastest single stretch of `metres` in a run: how long it took, and when it began (seconds in). */
+export function bestStretch(s: Streams, metres: number): { seconds: number; at: number } | null {
   const n = s.t.length;
-  if (n < 2 || s.d[n - 1] - s.d[0] < 1000) return null;
+  if (n < 2 || s.d[n - 1] - s.d[0] < metres) return null;
   let best: { seconds: number; at: number } | null = null;
   let j = 1;
   for (let i = 0; i < n; i++) {
-    const target = s.d[i] + 1000;
+    const target = s.d[i] + metres;
     while (j < n && s.d[j] < target) j++;
     if (j >= n) break;
-    // The kilometre ends somewhere between two points.
+    // The stretch ends somewhere between two points.
     const gap = s.d[j] - s.d[j - 1];
     const end = s.t[j - 1] + (s.t[j] - s.t[j - 1]) * (gap > 0 ? (target - s.d[j - 1]) / gap : 0);
     const seconds = end - s.t[i];

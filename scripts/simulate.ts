@@ -15,7 +15,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { bestKm, matchSongs, Play, Streams } from '../src/match';
+import { bestStretch, matchSongs, MILE_M, Play, Streams } from '../src/match';
 
 const args = process.argv.slice(2);
 const flag = (name: string, fallback: number) => {
@@ -278,10 +278,11 @@ let songCount = 0;
 for (let i = 0; i < RUNS; i++) {
   const run = simulateRun(i);
   const stravaId = -(i + 1);
-  const best = bestKm(run.streams);
+  const best = bestStretch(run.streams, 1000);
+  const mile = bestStretch(run.streams, MILE_M);
   sql.push(
-    `INSERT INTO runs (user_id, strava_id, name, start_time, distance_m, moving_s, elapsed_s, avg_hr, stream_state, streams, matched_at, best_km_s, best_km_at) VALUES ` +
-      `(${USER}, ${stravaId}, ${q(run.name)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.moving}, ${run.elapsed}, ${run.avgHr.toFixed(1)}, 'ok', ${q(JSON.stringify(run.streams))}, ${NOW}, ${q(best?.seconds ?? null)}, ${q(best?.at ?? null)});`,
+    `INSERT INTO runs (user_id, strava_id, name, start_time, distance_m, moving_s, elapsed_s, avg_hr, stream_state, streams, matched_at, best_km_s, best_km_at, best_mi_s, best_mi_at) VALUES ` +
+      `(${USER}, ${stravaId}, ${q(run.name)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.moving}, ${run.elapsed}, ${run.avgHr.toFixed(1)}, 'ok', ${q(JSON.stringify(run.streams))}, ${NOW}, ${q(best?.seconds ?? null)}, ${q(best?.at ?? null)}, ${q(mile?.seconds ?? null)}, ${q(mile?.at ?? null)});`,
   );
   for (const p of run.plays) {
     sql.push(`INSERT OR IGNORE INTO plays (user_id, played_at, track_id) VALUES (${USER}, ${p.played_at}, ${q(p.track_id)});`);

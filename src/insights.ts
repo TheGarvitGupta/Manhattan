@@ -19,6 +19,8 @@ interface RunRow {
   avg_hr: number | null;
   best_km_s: number | null;
   best_km_at: number | null;
+  best_mi_s: number | null;
+  best_mi_at: number | null;
 }
 
 interface SongRow {
@@ -103,7 +105,7 @@ function eligible(songs: Song[], strict: (s: Song) => boolean, loose: (s: Song) 
 export async function buildInsights(env: Env, user: User) {
   const runs = (
     await env.DB.prepare(
-      `SELECT id, start_time, distance_m, moving_s, avg_hr, best_km_s, best_km_at FROM runs
+      `SELECT id, start_time, distance_m, moving_s, avg_hr, best_km_s, best_km_at, best_mi_s, best_mi_at FROM runs
        WHERE user_id = ? AND stream_state = 'ok' AND moving_s > 0 ORDER BY start_time`,
     )
       .bind(user.id)
@@ -235,19 +237,21 @@ export async function buildInsights(env: Env, user: User) {
 
   const opener = [...all].sort((a, b) => b.opened - a.opened)[0];
 
-  // The fastest single kilometre, and what was playing through the middle of it.
-  let bestKm = null;
-  const quickest = runs.filter((r) => r.best_km_s != null).sort((a, b) => a.best_km_s! - b.best_km_s!)[0];
-  if (quickest) {
-    const middle = quickest.best_km_at! + quickest.best_km_s! / 2;
-    const playing = rows.find((r) => r.run_id === quickest.id && r.start_s <= middle && middle < r.end_s);
-    bestKm = {
-      seconds: quickest.best_km_s,
-      run_id: quickest.id,
-      start_time: quickest.start_time,
+  // The fastest single kilometre and mile, and what was playing through the middle of each.
+  const quickest = (seconds: (r: RunRow) => number | null, at: (r: RunRow) => number | null) => {
+    const run = runs.filter((r) => seconds(r) != null).sort((a, b) => seconds(a)! - seconds(b)!)[0];
+    if (!run) return null;
+    const middle = at(run)! + seconds(run)! / 2;
+    const playing = rows.find((r) => r.run_id === run.id && r.start_s <= middle && middle < r.end_s);
+    return {
+      seconds: seconds(run),
+      run_id: run.id,
+      start_time: run.start_time,
       song: playing ? { name: playing.name, artist: playing.artist, image: playing.image } : null,
     };
-  }
+  };
+  const bestKm = quickest((r) => r.best_km_s, (r) => r.best_km_at);
+  const bestMile = quickest((r) => r.best_mi_s, (r) => r.best_mi_at);
 
   // --- comparisons ---------------------------------------------------------------
 
@@ -310,6 +314,7 @@ export async function buildInsights(env: Env, user: User) {
     top_artists: topArtists,
     opener: opener && opener.opened >= 2 ? { ...opener.base, count: opener.opened } : null,
     best_km: bestKm,
+    best_mile: bestMile,
     // For the week-by-week chart, which the browser buckets in local time.
     per_run: everyRun.map((r) => ({ t: r.start_time, music_s: Math.round(r.music_s) })),
     artists: rankedArtists,

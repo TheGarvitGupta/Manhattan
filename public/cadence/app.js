@@ -243,6 +243,13 @@ function paceGap(speed, average, fmt) {
 	return sec === 0 ? 'your usual pace' : `${Math.abs(sec)} s/${fmt.unit} ${sec > 0 ? 'faster' : 'slower'}`;
 }
 
+/** The same, led by an arrow: coloured and up when faster, grey and down when slower. */
+function paceArrow(speed, average, fmt) {
+	const sec = Math.round(fmt.unitMeters / average - fmt.unitMeters / speed);
+	if (sec === 0) return paceGap(speed, average, fmt);
+	return [h('i', { class: `arrow ${sec > 0 ? 'up' : 'down'}`, 'aria-hidden': 'true' }, sec > 0 ? '▲' : '▼'), paceGap(speed, average, fmt)];
+}
+
 /** A span that covers every value with a little room either side. */
 function span(values, pad = 0.08) {
 	const lo = Math.min(...values);
@@ -316,23 +323,25 @@ function story(ins, fmt) {
 		out.push(section('Fastest and slowest songs', 'Each cover sits at the pace you ran while it played.',
 			h('div', { class: 'card' }, box),
 			h('div', { class: 'pair' },
-				songList('Fastest', 'You run quickest to these.', ins.fastest, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceGap(r.speed, average, fmt)),
-				songList('Slowest', 'You run slowest to these.', ins.slowest, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceGap(r.speed, average, fmt)),
+				songList('Fastest', 'You run quickest to these.', ins.fastest, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceArrow(r.speed, average, fmt)),
+				songList('Slowest', 'You run slowest to these.', ins.slowest, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceArrow(r.speed, average, fmt)),
 			),
 		));
 	}
 
 	// 3. What gets played.
 	const mostPlays = Math.max(1, ...ins.most_played.map((r) => r.plays));
-	const km = ins.best_km;
+	// The fastest single kilometre, or mile for people who think in miles.
+	const miles = fmt.unit === 'mi';
+	const km = miles ? ins.best_mile : ins.best_km;
 	out.push(section('On repeat', 'What you play most while you run.',
 		h('div', { class: 'pair' },
 			songList('Most played', 'How many times each came up on a run.', ins.most_played, (r) => `${r.plays}×`, (r) => `on ${plural(r.runs, 'run')}`, (r) => bar(r.plays / mostPlays, 'var(--pace)')),
-			songList('New this month', 'First heard on a run in the last 30 days.', ins.new_this_month, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceGap(r.speed, average, fmt)),
+			songList('New this month', 'First heard on a run in the last 30 days.', ins.new_this_month, (r) => fmt.pace(r.speed).split(' ')[0], (r) => paceArrow(r.speed, average, fmt)),
 		),
 		h('div', { class: 'pair' },
 			ins.opener ? fact('Your opener', 'The song you start runs with most.', ins.opener.image, ins.opener.name, ins.opener.name, `${ins.opener.artist} · started ${plural(ins.opener.count, 'run')}`) : null,
-			km ? fact('Fastest kilometre', 'Your quickest single km, and what was on.', km.song && km.song.image, km.song ? km.song.name : '♪', minSec(km.seconds), `${km.song ? `${km.song.name} · ` : ''}${day(km.start_time)}`, `#/run/${km.run_id}`) : null,
+			km ? fact(miles ? 'Fastest mile' : 'Fastest kilometre', `Your quickest single ${miles ? 'mile' : 'km'}, and what was on.`, km.song && km.song.image, km.song ? km.song.name : '♪', minSec(km.seconds), `${km.song ? `${km.song.name} · ` : ''}${day(km.start_time)}`, `#/run/${km.run_id}`) : null,
 		),
 	));
 

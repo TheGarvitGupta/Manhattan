@@ -10,12 +10,15 @@
 	--border: rgba(11, 11, 11, 0.1);
 	--wash: rgba(11, 11, 11, 0.04);
 	--band: rgba(11, 11, 11, 0.045);
-	/* Data colours: one series, a second measure, and a faster/slower pair. */
-	--pace: #2a78d6;
+	/* Violet is the app's own colour: it sits apart from Strava orange and Spotify green. */
+	--accent: #6250d6;
+	/* Data colours: pace wears the accent; heart rate, power and cadence each get their own. */
+	--pace: var(--accent);
 	--heart: #eb6834;
-	--faster: #2a78d6;
+	--faster: var(--accent);
 	--slower: #e34948;
-	--power: #6250d6;
+	--power: #2a78d6;
+	--up: var(--accent);
 	--cadence: #eda100;
 	--strava: #fc4c02;
 	--spotify: #1db954;
@@ -34,11 +37,13 @@
 		--border: rgba(255, 255, 255, 0.1);
 		--wash: rgba(255, 255, 255, 0.06);
 		--band: rgba(255, 255, 255, 0.05);
-		--pace: #3987e5;
+		--accent: #9085e9;
+		--pace: var(--accent);
 		--heart: #d95926;
-		--faster: #3987e5;
+		--faster: var(--accent);
 		--slower: #e66767;
-		--power: #9085e9;
+		--power: #3987e5;
+		--up: var(--accent);
 		--cadence: #c98500;
 	}
 }
@@ -55,6 +60,7 @@ body {
 
 h1, h2, h3, p { margin: 0; }
 a { color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button { font: inherit; color: inherit; cursor: pointer; }
 [hidden] { display: none !important; }
 
@@ -206,11 +212,11 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 
 /* --- headline ------------------------------------------------------------------ */
 
-.headline { display: flex; align-items: center; gap: 28px; padding: 30px; }
+.headline { display: flex; align-items: center; gap: 28px; padding: 30px; background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 11%, var(--surface)), var(--surface) 62%); }
 .art.lg { width: 148px; height: 148px; border-radius: 16px; font-size: 44px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16); }
 .art.md { width: 40px; height: 40px; border-radius: 8px; font-size: 15px; }
 .headline-text { min-width: 0; }
-.kicker { color: var(--ink-2); font-size: 15px; }
+.kicker { color: var(--accent); font-size: 15px; font-weight: 600; }
 .headline h1 { font-size: clamp(30px, 5.4vw, 52px); line-height: 1.05; letter-spacing: -0.03em; margin: 4px 0 4px; }
 .headline .by { color: var(--ink-2); font-size: 17px; }
 .headline .proof { margin-top: 16px; color: var(--ink-2); font-size: 16px; }
@@ -246,6 +252,9 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .list .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .list .num b { display: block; font-weight: 650; font-size: 16px; letter-spacing: -0.01em; }
 .list .num span { display: block; color: var(--muted); font-size: 12px; }
+.arrow { font-style: normal; font-size: 9px; margin-right: 4px; vertical-align: 1px; }
+.arrow.up { color: var(--up); }
+.arrow.down { color: var(--muted); }
 .list li .meter { grid-column: 3 / -1; margin-top: 7px; }
 .meter.split { background: var(--wash); }
 .meter.split > i { background: var(--slower); }

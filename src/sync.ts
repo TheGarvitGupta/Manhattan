@@ -1,6 +1,6 @@
 // Pulls new songs and runs for a user, then lines them up.
 
-import { bestKm, matchSongs, normalizeStreams, Play, Streams } from './match';
+import { bestStretch, matchSongs, MILE_M, normalizeStreams, Play, Streams } from './match';
 import { accessToken, markRevoked, RUN_TYPES, spotifyRecentlyPlayed, stravaActivities, stravaStreams } from './providers';
 import { Budget, BudgetExceeded, Env, now, RateLimited } from './util';
 
@@ -110,14 +110,13 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
     if (raw) {
       const normalized = normalizeStreams(raw);
       const streams = JSON.stringify(normalized);
-      const best = bestKm(normalized);
+      const km = bestStretch(normalized, 1000);
+      const mile = bestStretch(normalized, MILE_M);
       await env.DB.batch([
-        env.DB.prepare(`UPDATE runs SET streams = ?, stream_state = 'ok', matched_at = NULL, best_km_s = ?, best_km_at = ? WHERE id = ?`).bind(
-          streams,
-          best?.seconds ?? null,
-          best?.at ?? null,
-          run.id,
-        ),
+        env.DB.prepare(
+          `UPDATE runs SET streams = ?, stream_state = 'ok', matched_at = NULL,
+             best_km_s = ?, best_km_at = ?, best_mi_s = ?, best_mi_at = ? WHERE id = ?`,
+        ).bind(streams, km?.seconds ?? null, km?.at ?? null, mile?.seconds ?? null, mile?.at ?? null, run.id),
         env.DB.prepare(`UPDATE activities SET streams = ?, stream_state = 'ok' WHERE user_id = ? AND strava_id = ?`).bind(streams, userId, run.strava_id),
       ]);
     } else {
