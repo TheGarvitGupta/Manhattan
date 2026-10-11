@@ -1,7 +1,7 @@
 // Cadence: which songs make you run faster?
 // Routes live under env.BASE_PATH (/cadence) so the app can sit on the main site.
 
-import { buildEmail, canSend, EmailUser, FROM, hasPatterns, Kind, send, sendWeekly, Variant } from './emails';
+import { accessRequestEmail, buildEmail, canSend, EmailUser, FROM, hasPatterns, Kind, send, sendWeekly, Variant } from './emails';
 import { buildInsights } from './insights';
 import { SongInterval, songIntervals } from './match';
 import { accessToken, authorizeUrl, exchangeSpotifyCode, exchangeStravaCode, Provider, saveTokens, stravaDeauthorize } from './providers';
@@ -109,6 +109,7 @@ async function me(env: Env, user: User) {
   )
     .bind(user.id)
     .first<{ t: number | null }>();
+  const asked = await env.DB.prepare(`SELECT 1 FROM access_requests WHERE user_id = ? AND created_at > ? LIMIT 1`).bind(user.id, now() - 30 * 86400).first();
   const conn = (p: Provider) => {
     const t = tokens.results.find((x) => x.provider === p);
     // The demo account has data but no real connections.
@@ -123,6 +124,8 @@ async function me(env: Env, user: User) {
     spotify: conn('spotify'),
     counts,
     since: since?.t ?? null,
+    // Whether they have already asked the owner to be added to Spotify.
+    access_requested: !!asked,
     email: { available: canSend(env), address: (user as EmailUser).email ?? null, confirmed: !!(user as EmailUser).email_confirmed_at },
   };
 }
@@ -378,6 +381,22 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
 
   if (path === '/auth/spotify' && method === 'GET') return authStart(req, env, 'spotify');
   if (path === '/auth/spotify/callback') return spotifyCallback(req, env, user, ctx);
+
+  if (path === '/api/access-request' && method === 'POST') {
+    const body = (await req.json().catch(() => ({}))) as { email?: string; message?: string };
+    const address = (body.email ?? '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || address.length > 254) return json({ error: 'That email address does not look right.' }, 400);
+    const recent = await env.DB.prepare(`SELECT 1 FROM access_requests WHERE user_id = ? AND created_at > ? LIMIT 1`).bind(user.id, now() - 86400).first();
+    if (recent) return json({ error: 'You already asked today. Give it a little time.' }, 429);
+    const message = (body.message ?? '').trim().slice(0, 500);
+    await env.DB.prepare(`INSERT INTO access_requests (user_id, spotify_email, message, created_at) VALUES (?, ?, ?, ?)`)
+      .bind(user.id, address, message || null, now())
+      .run();
+    // The owner is whoever set the app up: the first real account with an email on it.
+    const owner = await env.DB.prepare(`SELECT email FROM users WHERE is_demo = 0 AND email IS NOT NULL ORDER BY id LIMIT 1`).first<{ email: string }>();
+    if (owner) await send(env, owner.email, accessRequestEmail(env, url.origin, user, address, message), undefined, address).catch(console.error);
+    return json({ ok: true });
+  }
 
   if (path === '/api/email' && method === 'POST') {
     if (!canSend(env)) return json({ error: 'Email updates are not switched on yet.' }, 503);

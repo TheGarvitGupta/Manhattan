@@ -352,7 +352,7 @@ export function buildEmail(env: Env, origin: string, user: EmailUser, which: Kin
 export const canSend = (env: Env) => !!env.RESEND_API_KEY;
 
 /** Sends through Resend (resend.com), which has verified cadence.garvitgupta.com. */
-export async function send(env: Env, to: string, email: Email, unsubscribe: string): Promise<boolean> {
+export async function send(env: Env, to: string, email: Email, unsubscribe?: string, replyTo?: string): Promise<boolean> {
   if (!env.RESEND_API_KEY) return false;
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -363,11 +363,41 @@ export async function send(env: Env, to: string, email: Email, unsubscribe: stri
       subject: email.subject,
       html: email.html,
       text: email.text,
-      headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+      ...(replyTo ? { reply_to: replyTo } : {}),
+      ...(unsubscribe ? { headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } } : {}),
     }),
   });
   if (!res.ok) throw new Error(`Resend refused the email (${res.status}): ${(await res.text()).slice(0, 200)}`);
   return true;
+}
+
+/**
+ * A note to the app's owner that someone wants to be let in. Spotify limits
+ * the app to a few named accounts, which only the owner can add.
+ */
+export function accessRequestEmail(env: Env, origin: string, who: User, spotifyEmail: string, message: string): Email {
+  const app = `${origin}${env.BASE_PATH}/`;
+  const manage = `https://developer.spotify.com/dashboard/${env.SPOTIFY_CLIENT_ID}/users`;
+  const hero = `${kicker('Access request')}${headline(`${who.name} wants in`)}${lede('They signed in with Strava and are asking to be added to Spotify.')}`;
+  const line = (label: string, value: string) => `
+<tr><td style="padding:10px 0;border-top:1px solid ${LINE};font:13px/1.4 ${FONT};color:${SOFT};width:120px;" valign="top">${esc(label)}</td>
+<td style="padding:10px 0;border-top:1px solid ${LINE};font:15px/1.4 ${FONT};color:${INK};">${value}</td></tr>`;
+  const body = `
+${table(
+  line('Name', esc(who.name)) +
+    line('Spotify email', `<b style="font-weight:600;">${esc(spotifyEmail)}</b>`) +
+    line('Strava', `<a href="https://www.strava.com/athletes/${who.strava_athlete_id}" style="color:${ACCENT};">strava.com/athletes/${who.strava_athlete_id}</a>`) +
+    (message ? line('Message', esc(message)) : ''),
+)}
+${heading('To let them in')}
+${para('Add their name and Spotify email under User Management, then reply to tell them. They reconnect Spotify in Cadence and it starts working.')}
+${button(manage, 'Open User Management')}`;
+  return {
+    subject: `${who.name} is asking for Spotify access`,
+    preview: `Spotify email: ${spotifyEmail}`,
+    html: shell('Access request', hero, body, `Spotify email: ${spotifyEmail}`, 'Sent because someone used “Ask for access” in Cadence. Replying goes to them.', app),
+    text: `${who.name} is asking for Spotify access to Cadence.\n\nSpotify email: ${spotifyEmail}\nStrava: https://www.strava.com/athletes/${who.strava_athlete_id}\n${message ? `Message: ${message}\n` : ''}\nAdd them here: ${manage}\nReplying to this email goes to them.`,
+  };
 }
 
 /** Is it Sunday between 9:00 and 9:59 where this person is? */

@@ -108,6 +108,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .note p { flex: 1 1 280px; color: var(--ink-2); }
 .note strong { color: var(--ink); display: block; }
 .error { border-color: var(--slower); }
+.ask, .asked { flex: 1 1 100%; font-size: 14px; color: var(--ink-2); margin: 0; }
+.ask summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.ask p { margin: 8px 0 10px; }
+.ask .inline { flex: none; }
 .collecting .meter { flex: 1 1 100%; height: 6px; border-radius: 3px; margin: 0; }
 .collecting .meter > i { border-radius: 3px; }
 

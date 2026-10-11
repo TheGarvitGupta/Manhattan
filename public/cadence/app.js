@@ -198,12 +198,29 @@ function landing() {
 				h('i', { 'aria-hidden': 'true' }, '→'),
 				step(h('b', { class: 'note-glyph', 'aria-hidden': 'true' }, '♪'), 'Run with music'),
 			),
-			h('p', { class: 'fine' }, 'Read-only. Delete everything any time.'),
+			h('p', { class: 'fine' }, 'Read-only. Delete everything any time. Spotify access is by invitation: sign in, then ask for a spot.'),
 		),
 	);
 }
 
 // --- dashboard ----------------------------------------------------------------
+
+/**
+ * Spotify only lets a few named accounts use Cadence, so someone new asks the
+ * owner to add them. A small form, or a thank-you once it has been sent.
+ */
+function askForAccess() {
+	const { me } = state;
+	if (me.access_requested) return h('p', { class: 'asked' }, 'You’ve asked for access. Once you’re added, reconnect Spotify here.');
+	const email = h('input', { class: 'field', type: 'email', required: true, placeholder: 'The email on your Spotify account', autocomplete: 'email', 'aria-label': 'The email on your Spotify account', value: me.email.address || null });
+	const note = h('input', { class: 'field', type: 'text', maxlength: '500', placeholder: 'A note for Garvit (optional)', 'aria-label': 'A note for Garvit (optional)' });
+	const submit = () => act(() => api('api/access-request', 'POST', { email: email.value, message: note.value }));
+	return h('details', { class: 'ask' },
+		h('summary', null, 'Not been added yet? Ask for access'),
+		h('p', null, 'Spotify only lets Cadence connect a few people, each added by hand. Send your Spotify email and Garvit will add you.'),
+		h('form', { class: 'inline', onsubmit: (e) => (e.preventDefault(), submit()) }, email, note, h('button', { class: 'btn small', type: 'submit' }, 'Ask for access')),
+	);
+}
 
 const EMAIL_NOTES = { confirmed: ['Email confirmed.', 'Your Sunday roundup starts this week.'], off: ['Emails turned off.', 'You won’t hear from Cadence again unless you turn them back on.'] };
 
@@ -231,9 +248,9 @@ function notices() {
 		out.push(h('div', { class: 'card note error' }, h('p', null, h('strong', null, 'Strava needs reconnecting.'), 'Cadence lost access to your runs.'), h('a', { class: 'btn strava', href: 'auth/strava' }, 'Reconnect Strava')));
 	}
 	if (!me.spotify.connected) {
-		out.push(h('div', { class: 'card note' }, h('p', null, h('strong', null, 'One more step: connect Spotify.'), 'Cadence can only match songs it sees from now on, so connect before your next run.'), h('a', { class: 'btn spotify', href: 'auth/spotify' }, 'Connect Spotify')));
+		out.push(h('div', { class: 'card note' }, h('p', null, h('strong', null, 'One more step: connect Spotify.'), 'Cadence can only match songs it sees from now on, so connect before your next run.'), h('a', { class: 'btn spotify', href: 'auth/spotify' }, 'Connect Spotify'), askForAccess()));
 	} else if (me.spotify.not_allowed) {
-		out.push(h('div', { class: 'card note error' }, h('p', null, h('strong', null, 'Your Spotify account isn’t on the guest list yet.'), 'Spotify only lets Cadence connect a handful of people, each added by hand. Send Garvit the email address on your Spotify account, then reconnect once you’ve been added.'), h('a', { class: 'btn spotify', href: 'auth/spotify' }, 'Reconnect Spotify')));
+		out.push(h('div', { class: 'card note error' }, h('p', null, h('strong', null, 'Your Spotify account isn’t on the guest list yet.'), 'Spotify only lets Cadence connect a handful of people, each added by hand. Ask below, then reconnect once you’ve been added.'), h('a', { class: 'btn spotify', href: 'auth/spotify' }, 'Reconnect Spotify'), askForAccess()));
 	} else if (!me.spotify.ok) {
 		out.push(h('div', { class: 'card note error' }, h('p', null, h('strong', null, 'Spotify needs reconnecting.'), 'Cadence lost access to your listening history.'), h('a', { class: 'btn spotify', href: 'auth/spotify' }, 'Reconnect Spotify')));
 	}
