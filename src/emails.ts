@@ -81,10 +81,10 @@ const cover = (image: string | null, name: string, size: number) =>
     ? `<img src="${esc(image)}" width="${size}" height="${size}" alt="" style="display:block;border-radius:${Math.round(size / 5)}px;">`
     : `<div style="width:${size}px;height:${size}px;border-radius:${Math.round(size / 5)}px;background:#eeede8;color:${MUTED};font:600 ${Math.round(size / 2.6)}px/${size}px ${FONT};text-align:center;">${esc((name || '?')[0])}</div>`;
 
-/** One row: a cover (or nothing), two lines of text, and a value on the right. */
-const row = (image: string | null | undefined, title: string, sub: string, value: string, detail = '') => `
+/** One row: a cover or a glyph tile, two lines of text, and a value on the right. */
+const row = (image: string | null, title: string, sub: string, value: string, detail = '', lead = cover(image, title, 44)) => `
 <tr>
-  ${image === undefined ? '' : `<td width="44" style="padding:10px 12px 10px 0;border-top:1px solid ${LINE};">${cover(image, title, 44)}</td>`}
+  <td width="44" style="padding:10px 12px 10px 0;border-top:1px solid ${LINE};">${lead}</td>
   <td style="padding:10px 0;border-top:1px solid ${LINE};font:15px/1.35 ${FONT};color:${INK};">
     <b style="font-weight:600;">${esc(title)}</b><br><span style="color:${SOFT};font-size:13px;">${esc(sub)}</span>
   </td>
@@ -134,6 +134,19 @@ function links(env: Env, origin: string, user: EmailUser) {
   };
 }
 
+/** Strava's activity glyphs, as on garvitgupta.com. Mail apps strip inline SVG, so these are small PNGs. */
+function glyphTile(type: string, app: string): string {
+  const key = /^(Run|TrailRun|VirtualRun)$/.test(type)
+    ? 'run'
+    : /^(Ride|VirtualRide|GravelRide|MountainBikeRide|EBikeRide)$/.test(type)
+      ? 'ride'
+      : /^(WeightTraining|Workout|Crossfit)$/.test(type)
+        ? 'weight'
+        : null;
+  if (!key) return cover(null, kind(type), 44);
+  return `<div style="width:44px;height:44px;border-radius:9px;background:#f4f3ef;text-align:center;"><img src="${esc(app)}glyphs/${key}.png" width="22" height="22" alt="${esc(kind(type))}" style="display:inline-block;margin-top:11px;border:0;"></div>`;
+}
+
 const firstName = (user: User) => user.name.split(' ')[0] || 'there';
 
 // --- welcome ---------------------------------------------------------------------------
@@ -146,7 +159,7 @@ async function welcome(env: Env, origin: string, user: EmailUser): Promise<Email
   const step = (done: boolean, title: string, text: string) => `
 <tr>
   <td width="30" valign="top" style="padding:12px 12px 12px 0;border-top:1px solid ${LINE};">
-    <div style="width:24px;height:24px;border-radius:12px;background:${done ? ACCENT : '#eeede8'};color:${done ? '#ffffff' : MUTED};font:700 13px/24px ${FONT};text-align:center;">${done ? '&#10003;' : '&bull;'}</div>
+    <div style="width:24px;height:24px;border-radius:12px;background:${done ? ACCENT : '#eeede8'};color:${done ? '#ffffff' : '#c3c2b7'};font:700 13px/24px ${FONT};text-align:center;">&#10003;</div>
   </td>
   <td style="padding:12px 0;border-top:1px solid ${LINE};font:15px/1.4 ${FONT};color:${INK};"><b style="font-weight:600;">${esc(title)}</b><br><span style="color:${SOFT};font-size:14px;">${esc(text)}</span></td>
 </tr>`;
@@ -160,8 +173,7 @@ ${heading('What happens next')}
 ${table(
   step(true, 'Strava connected', 'New activities arrive on their own.') +
     step(spotify, spotify ? 'Spotify connected' : 'Connect Spotify', spotify ? 'Cadence notes each song as you finish it.' : 'Cadence can only match songs it sees from the day you connect.') +
-    step(false, 'Run with music on', `After ${RUNS_NEEDED} runs, your fastest and slowest songs appear.`) +
-    step(false, 'Sunday, 9am', 'A short roundup of your week lands here.'),
+    step(false, 'Run with music on', `After ${RUNS_NEEDED} runs, your fastest and slowest songs from Spotify will appear.`),
 )}
 ${button(l.app, 'Open Cadence')}`;
 
@@ -241,7 +253,7 @@ ${
     ? table(
         activities
           .map((a) =>
-            row(undefined, a.name, `${kind(a.type)} · ${length(a.elapsed_s)}${a.distance_m ? ` · ${u.dist(a.distance_m)}` : ''}`, when(a.start_time, user.email_tz), a.songs ? plural(a.songs, 'song') : 'no songs'),
+            row(null, a.name, `${kind(a.type)} · ${length(a.elapsed_s)}${a.distance_m ? ` · ${u.dist(a.distance_m)}` : ''}`, when(a.start_time, user.email_tz), a.songs ? plural(a.songs, 'song') : 'no songs', glyphTile(a.type, l.app)),
           )
           .join(''),
       )

@@ -1,3 +1,4 @@
+import { GLYPHS, glyphFor } from './glyphs.js';
 import { activityChart, h, hideTip, minSec, runChart, s as svg, spectrum, stretchStats } from './charts.js';
 
 const app = document.getElementById('app');
@@ -488,6 +489,13 @@ const dayName = (ts) => {
 };
 const kind = (a) => (RUN_TYPES.includes(a.type) ? 'Run' : words(a.type));
 
+/** A small tile with the activity's glyph (run, ride, weights), or its initial when there's no glyph. */
+function glyphTile(type) {
+	const key = glyphFor(type);
+	return h('span', { class: 'glyph-tile', 'aria-hidden': 'true' },
+		key ? svg('svg', { class: 'glyph', viewBox: '0 0 24 24' }, svg('path', { d: GLYPHS[key] })) : words(type)[0]);
+}
+
 /** An opened activity: the activity across the page, its songs under it, and its data under those. */
 // Under the chart, each distinct song is listed once with its totals for the activity.
 function opened(act, fmt) {
@@ -536,7 +544,8 @@ function opened(act, fmt) {
 
 	const card = h('div', { class: 'card' },
 		h('div', { class: 'opened-head' },
-			h('div', null,
+			glyphTile(act.type),
+			h('div', { class: 'grow' },
 				h('h3', null, act.name),
 				h('p', { class: 'sub' }, `${kind(act)} · ${dayName(act.start_time)}, ${clockTime(act.start_time)} – ${clockTime(act.start_time + act.elapsed_s)} · ${duration(act.elapsed_s)}${act.distance_m ? ` · ${fmt.dist(act.distance_m)}` : ''}`),
 			),
@@ -569,6 +578,7 @@ function latest(fmt) {
 
 	const activities = recent.activities.map((a) =>
 		h('li', null, h('button', { class: `row${RUN_TYPES.includes(a.type) ? '' : ' off'}`, onclick: () => ((state.openActivity = a.id), render(true)) },
+			glyphTile(a.type),
 			h('div', { class: 'who' },
 				h('b', null, a.name),
 				h('span', null, `${kind(a)} · ${duration(a.elapsed_s)} · ${a.songs.length ? plural(a.songs.length, 'song') : 'no songs'}`),

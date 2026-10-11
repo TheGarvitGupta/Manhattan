@@ -320,6 +320,10 @@ a.fact:hover .who b { text-decoration: underline; }
 	.status .since { margin-left: 0; flex-basis: 100%; }
 }
 
+.glyph-tile { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 8px; background: var(--wash); color: var(--ink-2); font-size: 14px; font-weight: 600; }
+.glyph { width: 19px; height: 19px; fill: currentColor; }
+.opened-head .grow { flex: 1; min-width: 0; }
+
 .btn.small { padding: 7px 13px; font-size: 14px; }
 .opened-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .tally { margin-top: 14px !important; }
