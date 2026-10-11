@@ -228,23 +228,31 @@ function findings(ins, fmt) {
 	return out;
 }
 
-function ranking(songs, fmt) {
-	const top = songs.filter((s) => s.rel > 0).slice(0, 6);
-	const bottom = songs.filter((s) => s.rel < 0).slice(-6);
-	const max = Math.max(...[...top, ...bottom].map((s) => Math.abs(s.rel)));
-	const row = (s) =>
-		h('div', { class: 'row', title: `${duration(s.moving_s)} on ${plural(s.runs, 'run')}` },
-			art(s.image, s.name, true),
-			h('div', { class: 'who' }, h('b', null, s.name), h('span', null, s.artist)),
-			h('div', { class: 'track' }, h('div', { class: `bar ${s.rel >= 0 ? 'up' : 'down'}`, style: { width: `${(Math.abs(s.rel) / max) * 48}%` } })),
-			h('div', { class: 'num' }, h('b', null, signed(s.rel)), h('span', null, fmt.pace(s.speed))),
-		);
+/** A plain top-five: rank, song, and one number that says why it's there. */
+function topFive(title, sub, rows, value, detail) {
 	return h('div', { class: 'card' },
-		h('div', { class: 'legend' },
-			h('span', null, h('i', { class: 'key', style: { background: 'var(--faster)' } }), 'Faster than the rest of the run'),
-			h('span', null, h('i', { class: 'key', style: { background: 'var(--slower)' } }), 'Slower'),
-		),
-		h('div', { class: 'rank' }, top.map(row), top.length && bottom.length ? h('div', { class: 'gap' }) : null, bottom.map(row)),
+		h('h3', null, title),
+		h('p', { class: 'sub' }, sub),
+		rows.length
+			? h('ol', { class: 'toplist' }, rows.map((r, i) =>
+				h('li', null,
+					h('span', { class: 'rank-n' }, i + 1),
+					art(r.image, r.name, true),
+					h('div', { class: 'who' }, h('b', null, r.name), h('span', null, r.artist)),
+					h('div', { class: 'num' }, h('b', null, value(r)), h('span', null, detail(r))),
+				)))
+			: h('p', { class: 'dim' }, 'Not enough runs with music yet.'),
+	);
+}
+
+function songLists(ins, fmt) {
+	return h('div', { class: 'pair three' },
+		topFive('Most played', 'The songs that come up most often while you run.', ins.most_played,
+			(r) => `${r.plays}×`, (r) => `on ${plural(r.runs, 'run')}`),
+		topFive('Fastest songs', 'Your quickest average pace while each song played.', ins.fastest,
+			(r) => fmt.pace(r.speed), (r) => `over ${duration(r.moving_s)}`),
+		topFive('Endurance songs', 'Your slowest, steadiest pace: the ones for long, easy miles.', ins.slowest,
+			(r) => fmt.pace(r.speed), (r) => `over ${duration(r.moving_s)}`),
 	);
 }
 
@@ -408,6 +416,12 @@ function dashboard() {
 		tile('Songs heard on runs', t.tracks),
 	));
 
+	page.append(h('section', null,
+		h('h2', null, 'Your songs on runs'),
+		h('p', { class: 'sub' }, 'Pace is your average while the song was playing, across every run it came up on.'),
+		songLists(ins, fmt),
+	));
+
 	const found = findings(ins, fmt);
 	page.append(h('section', null,
 		h('h2', null, 'What your runs say'),
@@ -415,13 +429,6 @@ function dashboard() {
 		h('div', { class: 'findings' }, found),
 	));
 
-	if (ins.songs.length >= 2) {
-		page.append(h('section', null,
-			h('h2', null, 'Your fastest and slowest songs'),
-			h('p', { class: 'sub' }, 'How much quicker or slower you ran while each song played.'),
-			ranking(ins.songs, fmt),
-		));
-	}
 
 	if (ins.changes) {
 		const byId = new Map(runs.map((r) => [r.id, r]));

@@ -133,22 +133,6 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .key.line { height: 2px; width: 16px; border-radius: 1px; }
 .key.faint { opacity: 0.4; }
 
-.rank { display: grid; grid-template-columns: 30px minmax(0, 1.1fr) minmax(90px, 1.4fr) 104px; gap: 4px 12px; align-items: center; }
-.rank .row { display: contents; }
-.rank .row > * { padding: 5px 0; }
-.rank .who { min-width: 0; }
-.rank .who b, .rank .who span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rank .who b { font-weight: 600; font-size: 14px; }
-.rank .who span { color: var(--ink-2); font-size: 13px; }
-.rank .track { position: relative; height: 22px; }
-.rank .track::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--axis); }
-.rank .bar { position: absolute; top: 6px; height: 10px; min-width: 2px; }
-.rank .bar.up { left: 50%; background: var(--faster); border-radius: 0 4px 4px 0; }
-.rank .bar.down { right: 50%; background: var(--slower); border-radius: 4px 0 0 4px; }
-.rank .num { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
-.rank .num b { font-weight: 600; }
-.rank .num span { display: block; color: var(--muted); font-size: 12px; }
-.rank .gap { grid-column: 1 / -1; border-top: 1px solid var(--grid); margin: 6px 0; padding: 0; }
 
 /* --- charts --------------------------------------------------------------- */
 
@@ -209,6 +193,18 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .rows .go { color: var(--muted); font-size: 18px; line-height: 1; }
 .rows .off .who b { font-weight: 500; }
 
+.pair.three { grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+.toplist { list-style: none; margin: 0; padding: 0; }
+.toplist li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 0; border-top: 1px solid var(--grid); }
+.toplist .rank-n { width: 14px; flex: none; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.toplist .who { flex: 1; min-width: 0; }
+.toplist .who b, .toplist .who span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toplist .who b { font-weight: 600; font-size: 14px; }
+.toplist .who span { color: var(--ink-2); font-size: 13px; }
+.toplist .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.toplist .num b { display: block; font-weight: 600; font-size: 14px; }
+.toplist .num span { display: block; color: var(--muted); font-size: 12px; }
+
 .btn.small { padding: 7px 13px; font-size: 14px; }
 .opened-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .tally { margin-top: 14px !important; }
@@ -228,7 +224,6 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .foot { color: var(--muted); font-size: 13px; margin-top: 40px; }
 
 @media (max-width: 560px) {
-	.rank { grid-template-columns: 30px minmax(0, 1fr) 70px 76px; }
 	.hide-s { display: none; }
 	.card { padding: 16px; }
 }

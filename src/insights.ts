@@ -80,6 +80,8 @@ export async function buildInsights(env: Env, user: User) {
   const perRun = new Map(runs.map((r) => [r.id, { ...r, speed: r.distance_m / r.moving_s, songs: 0, music_s: 0 }]));
 
   const songs = new Map<string, { b: Bucket; name: string; artist: string; image: string | null }>();
+  // Every time a song came up on a run, however briefly.
+  const played = new Map<string, { name: string; artist: string; image: string | null; plays: number; runs: Set<number>; moving_s: number }>();
   const artists = new Map<string, Bucket>();
   const heard = new Map<string, number>();
   const fresh = new Bucket();
@@ -92,6 +94,11 @@ export async function buildInsights(env: Env, user: User) {
     if (!run) continue;
     run.songs++;
     run.music_s += row.moving_s;
+    let count = played.get(row.track_id);
+    if (!count) played.set(row.track_id, (count = { name: row.name, artist: row.artist, image: row.image, plays: 0, runs: new Set(), moving_s: 0 }));
+    count.plays++;
+    count.runs.add(run.id);
+    count.moving_s += row.moving_s;
     if (row.moving_s < MIN_SEGMENT_S || row.start_s < WARMUP_S) continue;
 
     let song = songs.get(row.track_id);
@@ -120,6 +127,16 @@ export async function buildInsights(env: Env, user: User) {
       .sort((a, b) => b.rel - a.rel);
   let rankedSongs = rank(240, 2);
   if (rankedSongs.length < 4) rankedSongs = rank(120, 1);
+
+  // Three plain top-fives: how often, how fast, how slow.
+  const mostPlayed = [...played.entries()]
+    .map(([track_id, c]) => ({ track_id, name: c.name, artist: c.artist, image: c.image, plays: c.plays, runs: c.runs.size, moving_s: Math.round(c.moving_s) }))
+    .sort((a, b) => b.plays - a.plays || b.moving_s - a.moving_s)
+    .slice(0, 5);
+  const byPace = [...rankedSongs].sort((a, b) => b.speed - a.speed);
+  const fastest = byPace.slice(0, 5);
+  // Never list a song as both fastest and slowest.
+  const slowest = byPace.slice(Math.max(5, byPace.length - 5)).reverse();
 
   const rankedArtists = [...artists.entries()]
     .map(([artist, b]) => ({ artist, ...b.summary() }))
@@ -164,6 +181,9 @@ export async function buildInsights(env: Env, user: User) {
       tracks: songs.size,
     },
     songs: rankedSongs,
+    most_played: mostPlayed,
+    fastest,
+    slowest,
     artists: rankedArtists,
     changes,
     music,
