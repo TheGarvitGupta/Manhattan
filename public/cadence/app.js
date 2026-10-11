@@ -292,11 +292,9 @@ function paintStatus() {
 			h('i', { class: 'dot', 'aria-hidden': 'true' }),
 		);
 	};
-	statusNode.replaceChildren(
-		chip('strava', 'Strava'),
-		chip('spotify', 'Spotify'),
-		me.since ? h('span', { class: 'since' }, `Data since ${new Date(me.since * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`) : null,
-	);
+	// "Data since" only appears once there is some data; nothing is shown in its place.
+	const since = me.since ? [h('span', { class: 'since' }, `Data since ${new Date(me.since * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`)] : [];
+	statusNode.replaceChildren(chip('strava', 'Strava'), chip('spotify', 'Spotify'), ...since);
 }
 
 function statusBar() {
