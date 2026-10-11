@@ -1,4 +1,4 @@
-import { activityChart, changesChart, h, hideTip, minSec, runChart, stretchStats } from './charts.js';
+import { activityChart, changesChart, h, hideTip, minSec, runChart, stretchStats, weekBars } from './charts.js';
 
 const app = document.getElementById('app');
 const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null };
@@ -187,18 +187,6 @@ const SAME = 0.004; // under 0.4% is "about the same"
 
 function findings(ins, fmt) {
 	const out = [];
-	const songs = ins.songs;
-	if (songs.length >= 2) {
-		const fast = songs[0];
-		const slow = songs[songs.length - 1];
-		const line = (s) => `${fmt.pace(s.speed)} over ${duration(s.moving_s)} on ${plural(s.runs, 'run')}`;
-		if (fast.rel > 0) out.push(finding('Fastest song', `You run fastest to “${fast.name}”`, `${percent(fast.rel)} quicker than the rest of those runs. ${line(fast)}.`, art(fast.image, fast.name)));
-		if (slow.rel < 0) out.push(finding('Slowest song', `You slow down for “${slow.name}”`, `${percent(slow.rel)} slower than the rest of those runs. ${line(slow)}.`, art(slow.image, slow.name)));
-	}
-	if (ins.artists.length >= 2 && ins.artists[0].rel > 0) {
-		const a = ins.artists[0];
-		out.push(finding('Fastest artist', `${a.artist} gets the most out of you`, `${percent(a.rel)} quicker than your run average across ${duration(a.moving_s)} of their songs.`));
-	}
 	if (ins.changes) {
 		const { few, many } = ins.changes;
 		const longer = few.distance_m >= many.distance_m ? few : many;
@@ -228,31 +216,97 @@ function findings(ins, fmt) {
 	return out;
 }
 
-/** A plain top-five: rank, song, and one number that says why it's there. */
-function topFive(title, sub, rows, value, detail) {
-	return h('div', { class: 'card' },
+/**
+ * A compact ranked list: cover, name, one number, and a thin meter under each
+ * row. With `range` the meter is a dot placed between two ends (for measures
+ * like pace that don't start at zero); without it, a bar from zero.
+ */
+function mini(title, rows, o) {
+	if (!rows || !rows.length) return null;
+	const [lo, hi] = o.range || [0, Math.max(...rows.map(o.amount))];
+	const label = o.name || ((r) => r.name);
+	return h('div', { class: 'card mini' },
 		h('h3', null, title),
-		h('p', { class: 'sub' }, sub),
-		rows.length
-			? h('ol', { class: 'toplist' }, rows.map((r, i) =>
-				h('li', null,
-					h('span', { class: 'rank-n' }, i + 1),
-					art(r.image, r.name, true),
-					h('div', { class: 'who' }, h('b', null, r.name), h('span', null, r.artist)),
-					h('div', { class: 'num' }, h('b', null, value(r)), h('span', null, detail(r))),
-				)))
-			: h('p', { class: 'dim' }, 'Not enough runs with music yet.'),
+		h('ol', { class: o.plain ? 'plain' : null }, rows.map((r) => {
+			const f = hi > lo ? Math.min(1, Math.max(0, (o.amount(r) - lo) / (hi - lo))) : 1;
+			const mark = h('i', { style: o.range ? { left: `${5 + f * 90}%`, background: o.color } : { width: `${Math.max(2, f * 100)}%`, background: o.color } });
+			return h('li', { title: r.artist ? `${r.name} · ${r.artist}` : null },
+				o.plain ? null : art(r.image, label(r), true),
+				h('span', { class: 'name' }, label(r)),
+				h('b', null, o.value(r)),
+				h('i', { class: `meter${o.range ? ' dot' : ''}` }, mark),
+			);
+		})),
+		o.ends ? h('div', { class: 'ends' }, h('span', null, o.ends[0]), h('span', null, o.ends[1])) : null,
 	);
 }
 
-function songLists(ins, fmt) {
-	return h('div', { class: 'pair three' },
-		topFive('Most played', 'The songs that come up most often while you run.', ins.most_played,
-			(r) => `${r.plays}×`, (r) => `on ${plural(r.runs, 'run')}`),
-		topFive('Fastest songs', 'Your quickest average pace while each song played.', ins.fastest,
-			(r) => fmt.pace(r.speed), (r) => `over ${duration(r.moving_s)}`),
-		topFive('Endurance songs', 'Your slowest, steadiest pace: the ones for long, easy miles.', ins.slowest,
-			(r) => fmt.pace(r.speed), (r) => `over ${duration(r.moving_s)}`),
+/** One headline fact: a cover, a big value, a short line. */
+function feature(title, image, name, big, small, href) {
+	const body = [art(image, name), h('div', { class: 'who' }, h('b', null, big), h('span', null, small))];
+	return h('div', { class: 'card mini' }, h('h3', null, title), href ? h('a', { class: 'feature', href }, body) : h('div', { class: 'feature' }, body));
+}
+
+/** A span that covers every value with a little room either side. */
+function span(values, pad = 0.08) {
+	const lo = Math.min(...values);
+	const hi = Math.max(...values);
+	const room = (hi - lo || 1) * pad;
+	return [lo - room, hi + room];
+}
+
+function songCards(ins, fmt) {
+	const { runs } = state;
+	const BLUE = 'var(--pace)';
+	const pacePool = [...ins.fastest, ...ins.slowest, ...ins.new_this_month].map((r) => r.speed);
+	const paceRange = pacePool.length ? span(pacePool) : null;
+	const pace = { amount: (r) => r.speed, value: (r) => fmt.pace(r.speed).split(' ')[0], range: paceRange, color: BLUE, ends: ['slower', `faster · min/${fmt.unit}`] };
+	const hrPool = [...ins.heart.high, ...ins.heart.low].map((r) => r.hr);
+	const heart = { amount: (r) => r.hr, value: (r) => Math.round(r.hr), range: hrPool.length ? span(hrPool) : null, color: 'var(--heart)', ends: ['lower', 'higher · bpm'] };
+
+	// Pace by time of day, in the viewer's own timezone.
+	const parts = [['Morning', 0, 12], ['Afternoon', 12, 17], ['Evening', 17, 24]]
+		.map(([name, from, to]) => {
+			const mine = runs.filter((r) => { const hr = new Date(r.start_time * 1000).getHours(); return hr >= from && hr < to; });
+			const moving = mine.reduce((a, r) => a + r.moving_s, 0);
+			return { name: `${name} · ${mine.length}`, n: mine.length, speed: moving ? mine.reduce((a, r) => a + r.distance_m, 0) / moving : 0 };
+		})
+		.filter((p) => p.n >= 2);
+
+	// Minutes with music for each of the last twelve weeks, Monday to Sunday.
+	const monday = new Date();
+	monday.setHours(0, 0, 0, 0);
+	monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+	const weeks = Array.from({ length: 12 }, (_, i) => {
+		const start = new Date(monday);
+		start.setDate(start.getDate() - 7 * (11 - i));
+		return { start, seconds: 0 };
+	});
+	for (const r of ins.per_run) {
+		const i = 11 - Math.floor((monday.getTime() / 1000 + 7 * 86400 - r.t) / (7 * 86400));
+		if (weeks[i]) weeks[i].seconds += r.music_s;
+	}
+	const weekBox = h('div', { class: 'chart' });
+	const weekly = weeks.some((w) => w.seconds) ? h('div', { class: 'card mini wide' }, h('h3', null, 'Music each week'), weekBox) : null;
+	if (weekly) weekBars(weekBox, weeks, duration);
+
+	const km = ins.best_km;
+	return h('div', { class: 'minis' },
+		mini('Most played', ins.most_played, { amount: (r) => r.plays, value: (r) => `${r.plays}×`, color: BLUE }),
+		mini('Fastest', ins.fastest, pace),
+		mini('Endurance', ins.slowest, pace),
+		mini('Carried you furthest', ins.furthest, { amount: (r) => r.distance_m, value: (r) => fmt.dist(r.distance_m), color: BLUE }),
+		mini('On your long runs', ins.long_run, { amount: (r) => r.run_m, value: (r) => fmt.dist(r.run_m), color: BLUE }),
+		mini('New this month', ins.new_this_month, pace),
+		mini('Heart-rate raisers', ins.heart.high, heart),
+		mini('Heart-rate calmers', ins.heart.low, heart),
+		mini('Most skipped', ins.skips.most, { amount: (r) => r.rate, value: (r) => `${r.skipped} of ${r.plays}`, range: [0, 1], color: 'var(--slower)', ends: ['never', 'always'] }),
+		mini('Never skipped', ins.skips.least.filter((r) => r.skipped === 0), { amount: (r) => r.plays, value: (r) => `${r.plays}×`, color: BLUE }),
+		mini('Top artists', ins.top_artists, { amount: (r) => r.moving_s, value: (r) => duration(r.moving_s), name: (r) => r.artist, plain: true, color: BLUE }),
+		mini('Time of day', parts, { amount: (r) => r.speed, value: (r) => fmt.pace(r.speed).split(' ')[0], range: parts.length ? span(parts.map((p) => p.speed), 0.3) : null, plain: true, color: BLUE, ends: ['slower', 'faster'] }),
+		ins.opener ? feature('Your opener', ins.opener.image, ins.opener.name, ins.opener.name, `starts ${plural(ins.opener.count, 'run')}`) : null,
+		km ? feature('Fastest kilometre', km.song && km.song.image, km.song ? km.song.name : '♪', minSec(km.seconds), `${km.song ? km.song.name : 'no music'} · ${day(km.start_time)}`, `#/run/${km.run_id}`) : null,
+		weekly,
 	);
 }
 
@@ -418,14 +472,14 @@ function dashboard() {
 
 	page.append(h('section', null,
 		h('h2', null, 'Your songs on runs'),
-		h('p', { class: 'sub' }, 'Pace is your average while the song was playing, across every run it came up on.'),
-		songLists(ins, fmt),
+		h('p', { class: 'sub' }, 'Hover a song for its artist.'),
+		songCards(ins, fmt),
 	));
 
 	const found = findings(ins, fmt);
 	page.append(h('section', null,
-		h('h2', null, 'What your runs say'),
-		h('p', { class: 'sub' }, found.length ? 'Each song is compared with the pace of the run it played on. The first two minutes of a run are left out as warm-up.' : 'Not enough runs with music yet. Findings appear after a few more.'),
+		h('h2', null, 'Patterns'),
+		h('p', { class: 'sub' }, found.length ? 'Compared with the pace of the run each song played on.' : 'Not enough runs with music yet.'),
 		h('div', { class: 'findings' }, found),
 	));
 

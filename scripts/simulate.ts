@@ -15,7 +15,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { matchSongs, Play, Streams } from '../src/match';
+import { bestKm, matchSongs, Play, Streams } from '../src/match';
 
 const args = process.argv.slice(2);
 const flag = (name: string, fallback: number) => {
@@ -62,6 +62,7 @@ interface Track {
   image: string;
   duration: number;
   boost: number; // fractional effect on pace while this plays
+  since: number; // how far through the period (0-1) the runner discovered it
   weight: number; // how often it comes up
 }
 
@@ -85,11 +86,13 @@ const tracks: Track[] = TITLES.map((name, i) => {
     duration: Math.round(between(150, 265)),
     boost: artistBoost[a] + gauss() * 0.022,
     weight: 0.3 + rand() ** 2 * 3,
+    // A few songs are recent discoveries, so there is something "new this month".
+    since: i >= TITLES.length - 4 ? 0.88 : 0,
   };
 });
 
-function nextTrack(recent: string[]): Track {
-  const pool = tracks.filter((t) => !recent.includes(t.id));
+function nextTrack(recent: string[], progress = 1): Track {
+  const pool = tracks.filter((t) => !recent.includes(t.id) && t.since <= progress);
   let r = rand() * pool.reduce((a, t) => a + t.weight, 0);
   for (const t of pool) if ((r -= t.weight) <= 0) return t;
   return pool[pool.length - 1];
@@ -150,7 +153,7 @@ function simulateRun(index: number): SimRun {
   while (d < targetM) {
     const clock = start + t;
     if (!silent && clock >= songEnd) {
-      current = nextTrack(recent);
+      current = nextTrack(recent, progress);
       recent.push(current.id);
       if (recent.length > 8) recent.shift();
       const skip = rand() < 0.04 + 0.5 * restless;
@@ -275,9 +278,10 @@ let songCount = 0;
 for (let i = 0; i < RUNS; i++) {
   const run = simulateRun(i);
   const stravaId = -(i + 1);
+  const best = bestKm(run.streams);
   sql.push(
-    `INSERT INTO runs (user_id, strava_id, name, start_time, distance_m, moving_s, elapsed_s, avg_hr, stream_state, streams, matched_at) VALUES ` +
-      `(${USER}, ${stravaId}, ${q(run.name)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.moving}, ${run.elapsed}, ${run.avgHr.toFixed(1)}, 'ok', ${q(JSON.stringify(run.streams))}, ${NOW});`,
+    `INSERT INTO runs (user_id, strava_id, name, start_time, distance_m, moving_s, elapsed_s, avg_hr, stream_state, streams, matched_at, best_km_s, best_km_at) VALUES ` +
+      `(${USER}, ${stravaId}, ${q(run.name)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.moving}, ${run.elapsed}, ${run.avgHr.toFixed(1)}, 'ok', ${q(JSON.stringify(run.streams))}, ${NOW}, ${q(best?.seconds ?? null)}, ${q(best?.at ?? null)});`,
   );
   for (const p of run.plays) {
     sql.push(`INSERT OR IGNORE INTO plays (user_id, played_at, track_id) VALUES (${USER}, ${p.played_at}, ${q(p.track_id)});`);

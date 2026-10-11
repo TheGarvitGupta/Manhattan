@@ -1,6 +1,6 @@
 // Pulls new songs and runs for a user, then lines them up.
 
-import { matchSongs, normalizeStreams, Play, Streams } from './match';
+import { bestKm, matchSongs, normalizeStreams, Play, Streams } from './match';
 import { accessToken, markRevoked, RUN_TYPES, spotifyRecentlyPlayed, stravaActivities, stravaStreams } from './providers';
 import { Budget, BudgetExceeded, Env, now, RateLimited } from './util';
 
@@ -108,9 +108,16 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
   for (const run of pending.results) {
     const raw = await stravaStreams(token, run.strava_id, budget);
     if (raw) {
-      const streams = JSON.stringify(normalizeStreams(raw));
+      const normalized = normalizeStreams(raw);
+      const streams = JSON.stringify(normalized);
+      const best = bestKm(normalized);
       await env.DB.batch([
-        env.DB.prepare(`UPDATE runs SET streams = ?, stream_state = 'ok', matched_at = NULL WHERE id = ?`).bind(streams, run.id),
+        env.DB.prepare(`UPDATE runs SET streams = ?, stream_state = 'ok', matched_at = NULL, best_km_s = ?, best_km_at = ? WHERE id = ?`).bind(
+          streams,
+          best?.seconds ?? null,
+          best?.at ?? null,
+          run.id,
+        ),
         env.DB.prepare(`UPDATE activities SET streams = ?, stream_state = 'ok' WHERE user_id = ? AND strava_id = ?`).bind(streams, userId, run.strava_id),
       ]);
     } else {

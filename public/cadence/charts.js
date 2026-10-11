@@ -585,3 +585,36 @@ export function activityChart(container, act, fmt) {
 		},
 	};
 }
+
+// --- small bar chart: one bar per week ------------------------------------------------
+
+/** `weeks` is oldest first: [{ start: Date, seconds }]. `label` formats a duration. */
+export function weekBars(container, weeks, label) {
+	const max = Math.max(1, ...weeks.map((w) => w.seconds));
+	const short = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+	responsive(container, (width) => {
+		const H = 92;
+		const svg = s('svg', { viewBox: `0 0 ${width} ${H + 18}`, height: H + 18, role: 'img', 'aria-label': 'Time spent running with music, week by week' });
+		const slot = width / weeks.length;
+		const bw = Math.min(24, slot - 2); // capped, with a gap between neighbours
+		svg.append(s('line', { class: 'axis', x1: 0, x2: width, y1: H, y2: H }));
+		weeks.forEach((w, i) => {
+			const bh = w.seconds ? Math.max(3, (w.seconds / max) * (H - 6)) : 0;
+			const x0 = i * slot + (slot - bw) / 2;
+			const r = Math.min(4, bh / 2);
+			// Rounded at the top, square on the baseline.
+			const bar = s('path', { class: 'wk', d: bh ? `M${x0} ${H}V${H - bh + r}Q${x0} ${H - bh} ${x0 + r} ${H - bh}H${x0 + bw - r}Q${x0 + bw} ${H - bh} ${x0 + bw} ${H - bh + r}V${H}Z` : '' });
+			const hit = s('rect', { class: 'hit', x: i * slot, y: 0, width: slot, height: H });
+			const show = (evt) => {
+				bar.classList.add('on');
+				showTip(evt, [h('div', { class: 't' }, `Week of ${short(w.start)}`), tipRow(null, w.seconds ? label(w.seconds) : 'None', 'with music')]);
+			};
+			hit.addEventListener('pointermove', show);
+			hit.addEventListener('pointerdown', show);
+			hit.addEventListener('pointerleave', () => (bar.classList.remove('on'), hideTip()));
+			svg.append(bar, hit);
+		});
+		svg.append(s('text', { x: 0, y: H + 14 }, short(weeks[0].start)), s('text', { x: width, y: H + 14, 'text-anchor': 'end' }, 'This week'));
+		return svg;
+	});
+}
