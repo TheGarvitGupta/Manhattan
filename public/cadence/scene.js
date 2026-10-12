@@ -221,6 +221,22 @@ export function scene(host, opts) {
 		ctx.globalAlpha = 1;
 	}
 
+	// Blurs what has been drawn so far inside a rounded box, by shrinking that patch to a few pixels and stretching it back.
+	// (The canvas's own blur filter would do it in a line, but Safari does not have one.)
+	var small = document.createElement("canvas"), tiny = document.createElement("canvas");
+	function frost(x, y, w, h, r) {
+		var sc = dpr * k, px = Math.round(x * sc), py = Math.round(y * sc), pw = Math.round(w * sc), ph = Math.round(h * sc);
+		var sw = Math.max(1, pw >> 2), sh = Math.max(1, ph >> 2), tw = Math.max(2, pw >> 5), th = Math.max(2, ph >> 5);
+		if (small.width !== sw || small.height !== sh) { small.width = sw; small.height = sh; }
+		if (tiny.width !== tw || tiny.height !== th) { tiny.width = tw; tiny.height = th; }
+		small.getContext("2d").drawImage(cv, px, py, pw, ph, 0, 0, sw, sh);
+		tiny.getContext("2d").drawImage(small, 0, 0, tw, th);
+		ctx.save(); rrect(x, y, w, h, r); ctx.clip();
+		ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+		ctx.drawImage(tiny, x, y, w, h);
+		ctx.restore();
+	}
+
 	function cover(song, x, y, s, a, live) {
 		ctx.save(); ctx.translate(x, y); ctx.transform(1, 0, -LEAN * 0.5, 1, 0, 0); ctx.globalAlpha = a;
 		ctx.fillStyle = "rgba(10,5,40,0.3)"; rrect(-s / 2 + 1, -s / 2 + 3, s, s, s * 0.22); ctx.fill();
@@ -367,8 +383,9 @@ export function scene(host, opts) {
 
 		// at the foot, under the runner: a dock with what is playing, and what is next queued beside it
 		var slide = 1 - ease((clock - changed) / 0.5), n = SONGS.length, dy = VH - 62 - lift;
-		ctx.fillStyle = "rgba(18,9,66,0.55)"; rrect(RX - 106, dy - 36, 212, 80, 22); ctx.fill();
-		ctx.strokeStyle = "rgba(255,255,255,0.14)"; ctx.lineWidth = 1; ctx.stroke();
+		frost(RX - 106, dy - 36, 212, 80, 22);   // frosted glass: what is behind the dock, blurred, under a dark tint
+		ctx.fillStyle = "rgba(18,9,66,0.38)"; rrect(RX - 106, dy - 36, 212, 80, 22); ctx.fill();
+		ctx.strokeStyle = "rgba(255,255,255,0.16)"; ctx.lineWidth = 1; ctx.stroke();
 		function slot(i) { return i < 0 ? [RX - 118, dy - 4, 26] : i === 0 ? [RX - 68, dy - 4, 48] : [RX - 68 + 22 + i * 40, dy - 4, 28]; }
 		for (j = 3; j >= -1; j--) {
 			var a0 = slot(j), a1 = slot(j + 1), qs = SONGS[((song.i + j) % n + n) % n];
