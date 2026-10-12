@@ -712,7 +712,7 @@ function latest(fmt) {
 				closeFilter = () => ((menu.hidden = true), toggle.setAttribute('aria-expanded', 'false'), (closeFilter = null));
 			}
 		},
-	}, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: 'M5 8h14M8 12h8M10.5 16h3' })));
+	}, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: 'M5.5 7.5h13M8 12h8M10.5 16.5h3' })));
 	const paint = () => {
 		const shown = filter.size ? recent.activities.filter((a) => filter.has(sportOf(a.type))) : recent.activities;
 		const all = recent.activities.length;

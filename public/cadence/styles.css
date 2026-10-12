@@ -18,7 +18,7 @@
 	--faster: var(--accent);
 	--slower: #e34948;
 	--power: #2a78d6;
-	--blue: #0a84ff;
+	--blue: #3d85f5;
 	--up: var(--accent);
 	--cadence: #eda100;
 	--strava: #fc4c02;
@@ -290,10 +290,10 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 12px; font-size: 13px; }
 .card-head .count { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .filter-box { position: relative; margin-left: auto; }
-.filter { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--wash); color: var(--blue); }
-.filter svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.filter { width: 38px; height: 38px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue); }
+.filter svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
 .filter.on { background: var(--blue); color: #fff; }
-.pick { position: absolute; right: 0; top: 40px; z-index: 20; min-width: 200px; padding: 5px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 12px 34px rgba(0, 0, 0, 0.16), 0 0 0 1px var(--border); }
+.pick { position: absolute; right: 0; top: 46px; z-index: 20; min-width: 200px; padding: 5px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 12px 34px rgba(0, 0, 0, 0.16), 0 0 0 1px var(--border); }
 .pick button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 9px; background: none; font-size: 15px; color: var(--ink); text-align: left; }
 .pick button:hover:not(:disabled) { background: var(--wash); }
 .pick button span { flex: 1; }
