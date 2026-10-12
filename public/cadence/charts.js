@@ -710,8 +710,8 @@ function routeLive(gl, container, polyline, act, streams, fmt) {
 		scrollZoom: false,
 		cooperativeGestures: matchMedia('(pointer: coarse)').matches,
 	});
-	map.addControl(new gl.NavigationControl(), 'top-right');
-	map.addControl(new gl.FullscreenControl(), 'top-right');
+	// Only the two zoom buttons: no compass, no full screen.
+	map.addControl(new gl.NavigationControl({ showCompass: false }), 'top-right');
 
 	// Sources and layers go with the style, so they are laid again each time the style is changed.
 	const lay = () => {
