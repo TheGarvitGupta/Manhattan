@@ -351,13 +351,16 @@ function measures(st, isRun, fmt) {
 			const b = Math.min(n - 1, i + 3);
 			const dm = st.m[b] - st.m[a];
 			const v = dm >= 0.4 * (st.t[b] - st.t[a]) && dm > 0 ? (st.d[b] - st.d[a]) / dm : 0;
-			// Pace, seconds per km or mile, for rides as for runs. A stop or a crawl leaves a gap in the line, so it does not stretch the scale.
-			return v > (isRun ? 0.8 : 1.8) ? fmt.unitMeters / v : null;
+			if (isRun) return v > 0.8 ? fmt.unitMeters / v : null; // pace, seconds per km or mile
+			return (v * 3600) / fmt.unitMeters;
 		});
 		// The whole activity's average, drawn across the panel as a dashed line.
 		const whole = st.m[n - 1] > 0 ? st.d[n - 1] / st.m[n - 1] : 0;
-		const average = whole > 0 ? fmt.unitMeters / whole : null;
-		out.push({ title: `Pace, min/${fmt.unit}`, average, averageLabel: 'Average pace', color: 'var(--pace)', values, invert: true, steps: [10, 15, 20, 30, 60, 120, 300], tick: minSec, tip: (v) => [minSec(v), `/${fmt.unit}`] });
+		const average = whole > 0 ? (isRun ? fmt.unitMeters / whole : (whole * 3600) / fmt.unitMeters) : null;
+		// A run is read by its pace, a ride by its speed.
+		out.push(isRun
+			? { title: `Pace, min/${fmt.unit}`, average, averageLabel: 'Average pace', color: 'var(--pace)', values, invert: true, steps: [10, 15, 20, 30, 60, 120, 300], tick: minSec, tip: (v) => [minSec(v), `/${fmt.unit}`] }
+			: { title: `Speed, ${fmt.per}`, average, averageLabel: 'Average speed', color: 'var(--pace)', values, tick: (v) => v, tip: (v) => [v.toFixed(1), fmt.per] });
 	}
 	if (any(st.hr)) out.push({ title: 'Heart rate, bpm', color: 'var(--heart)', values: st.hr, tick: (v) => v, tip: (v) => [Math.round(v), 'bpm'] });
 	if (any(st.w)) out.push({ title: 'Power, watts', color: 'var(--power)', values: smooth(st.w, 2), tick: (v) => v, tip: (v) => [Math.round(v), 'W'] });
@@ -569,7 +572,7 @@ export function coverColor(url) {
 					if (hi !== lo) hue = hi === r ? ((g - b) / (hi - lo)) % 6 : hi === g ? (b - r) / (hi - lo) + 2 : (r - g) / (hi - lo) + 4;
 					const sat = hi === lo ? 0 : (hi - lo) / (255 - Math.abs(hi + lo - 255));
 					const light = (hi + lo) / 510;
-					resolve(sat < 0.12 ? 'hsl(0 0% 38%)' : `hsl(${Math.round(hue * 60 + 360) % 360} ${Math.round(Math.max(55, sat * 100))}% ${Math.round(Math.min(54, Math.max(40, light * 100)))}%)`);
+					resolve(sat < 0.12 ? 'hsl(0, 0%, 38%)' : `hsl(${Math.round(hue * 60 + 360) % 360}, ${Math.round(Math.max(55, sat * 100))}%, ${Math.round(Math.min(54, Math.max(40, light * 100)))}%)`);
 				} catch {
 					resolve(null);
 				}
@@ -606,6 +609,183 @@ function decodeRoute(text) {
 	return points;
 }
 
+// Mapbox draws the map, as it does Strava's. Its code is served from here (vendor/), in the build that needs no inline
+// script or blob worker, so the page's content policy stays strict. The token is a public one; the server hands it over
+// with the account (it is a Worker secret, MAPBOX_TOKEN), so it is not written in the code.
+const MAP_STYLES = [
+	['Standard', 'mapbox://styles/mapbox/outdoors-v12'],
+	['Satellite', 'mapbox://styles/mapbox/satellite-v9'],
+	['Hybrid', 'mapbox://styles/mapbox/satellite-streets-v12'],
+];
+let mapbox = null;
+function loadMapbox(token) {
+	if (!mapbox) {
+		mapbox = new Promise((resolve, reject) => {
+			document.head.append(h('link', { rel: 'stylesheet', href: 'vendor/mapbox-gl.css' }));
+			const script = h('script', { src: 'vendor/mapbox-gl-csp.js' });
+			script.onload = () => {
+				const gl = window.mapboxgl;
+				if (!gl) return reject(new Error('no map'));
+				gl.workerUrl = new URL('vendor/mapbox-gl-csp-worker.js', document.baseURI).href;
+				gl.accessToken = token;
+				resolve(gl);
+			};
+			script.onerror = () => reject(new Error('no map'));
+			document.head.append(script);
+		});
+	}
+	return mapbox;
+}
+
+/**
+ * The route on a map that can be dragged, zoomed, tilted and switched between
+ * street, satellite and hybrid. The songs are laid along it as on the still
+ * map below, which is what is drawn if Mapbox cannot be.
+ */
+export function routeChart(container, polyline, act, streams, fmt, token) {
+	const still = () => routeStill(container, polyline, act, streams, fmt);
+	if (!token) return still();
+	loadMapbox(token)
+		.then((gl) => {
+			try {
+				routeLive(gl, container, polyline, act, streams, fmt);
+			} catch {
+				still();
+			}
+		})
+		.catch(still);
+}
+
+function routeLive(gl, container, polyline, act, streams, fmt) {
+	const coords = decodeRoute(polyline);
+	if (coords.length < 2) return;
+	const st = streams && streams.t && streams.t.length > 1 && streams.d[streams.d.length - 1] > 0 ? streams : null;
+
+	// How far along the route each point is, in metres.
+	const rad = Math.PI / 180;
+	const along = [0];
+	for (let i = 1; i < coords.length; i++) {
+		const [a, b] = [coords[i - 1], coords[i]];
+		const x = (b[1] - a[1]) * rad * Math.cos(((a[0] + b[0]) / 2) * rad);
+		const y = (b[0] - a[0]) * rad;
+		along.push(along[i - 1] + Math.hypot(x, y) * 6371000);
+	}
+	const length = along[along.length - 1] || 1;
+	// Mapbox takes longitude first.
+	const at = (dist) => {
+		const d = Math.max(0, Math.min(length, dist));
+		let i = 1;
+		while (i < coords.length - 1 && along[i] < d) i++;
+		const f = (d - along[i - 1]) / (along[i] - along[i - 1] || 1);
+		return [coords[i - 1][1] + (coords[i][1] - coords[i - 1][1]) * f, coords[i - 1][0] + (coords[i][0] - coords[i - 1][0]) * f];
+	};
+	const stretch = (from, to) => [at(from), ...coords.filter((_, i) => along[i] > from && along[i] < to).map((p) => [p[1], p[0]]), at(to)];
+	const line = (points, properties = {}) => ({ type: 'Feature', properties, geometry: { type: 'LineString', coordinates: points } });
+
+	// Each song's stretch of road, by distance: how far in the activity was when it began and ended, as a share of the whole.
+	const songs = [];
+	if (st) {
+		const total = st.d[st.d.length - 1];
+		for (const song of act.songs) {
+			const [a, b] = [song.from - act.start_time, song.to - act.start_time];
+			const from = (interp(st.t, st.d, a) / total) * length;
+			const to = (interp(st.t, st.d, b) / total) * length;
+			if (to - from < 1) continue;
+			songs.push({ song, from, to, speed: stretchStats(st, a, b).speed, color: '#6250d6' });
+		}
+	}
+
+	const holder = h('div', { class: 'map live' });
+	container.replaceChildren(holder);
+	const lats = coords.map((p) => p[0]);
+	const lngs = coords.map((p) => p[1]);
+	const map = new gl.Map({
+		container: holder,
+		style: MAP_STYLES[0][1],
+		bounds: [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+		// Room at the top for the buttons that sit over the map.
+		fitBoundsOptions: { padding: holder.clientWidth < 520 ? { top: 70, bottom: 34, left: 34, right: 56 } : { top: 70, bottom: 50, left: 60, right: 70 } },
+		// Scrolling the page past the map must not zoom it: zooming takes ctrl or two fingers.
+		cooperativeGestures: true,
+	});
+	map.addControl(new gl.NavigationControl({ visualizePitch: true }), 'top-right');
+	map.addControl(new gl.FullscreenControl(), 'top-right');
+
+	// Sources and layers go with the style, so they are laid again each time the style is changed.
+	let tilted = false;
+	const lay = () => {
+		if (map.getSource('road')) return;
+		map.addSource('road', { type: 'geojson', data: line(coords.map((p) => [p[1], p[0]])) });
+		map.addSource('songs', { type: 'geojson', data: { type: 'FeatureCollection', features: songs.map((q) => line(stretch(q.from + length * 0.002, q.to - length * 0.002), { color: q.color })) } });
+		const round = { 'line-cap': 'round', 'line-join': 'round' };
+		map.addLayer({ id: 'road-case', type: 'line', source: 'road', layout: round, paint: { 'line-color': '#fff', 'line-width': 6, 'line-opacity': 0.9 } });
+		map.addLayer({ id: 'road', type: 'line', source: 'road', layout: round, paint: { 'line-color': '#3a3a3a', 'line-width': 2, 'line-dasharray': [0.5, 2.5] } });
+		map.addLayer({ id: 'songs-case', type: 'line', source: 'songs', layout: round, paint: { 'line-color': '#fff', 'line-width': 11 } });
+		map.addLayer({ id: 'songs', type: 'line', source: 'songs', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': 6.5 } });
+		if (!map.getSource('heights')) map.addSource('heights', { type: 'raster-dem', url: 'mapbox://mapbox.mapbox-terrain-dem-v1', tileSize: 512, maxzoom: 14 });
+		map.setTerrain(tilted ? { source: 'heights', exaggeration: 1.4 } : null);
+	};
+	map.on('style.load', lay);
+
+	// The covers, each in the middle of its stretch, and the two ends of the route.
+	const dot = (cls, where) => new gl.Marker({ element: h('span', { class: `end-dot ${cls}` }) }).setLngLat(where).addTo(map);
+	dot('finish', [coords[coords.length - 1][1], coords[coords.length - 1][0]]);
+	dot('begin', [coords[0][1], coords[0][0]]);
+	for (const q of songs) {
+		if (!q.song.image) continue;
+		q.pin = h('span', { class: 'pin' }, h('img', { src: q.song.image, alt: '', referrerpolicy: 'no-referrer' }));
+		const tell = (evt) => showTip(evt, [tipSong(q.song, q.speed != null ? (RUNS.includes(act.type) ? fmt.pace(q.speed) : fmt.speed(q.speed)) : '')]);
+		q.pin.addEventListener('pointermove', tell);
+		q.pin.addEventListener('pointerdown', tell);
+		q.pin.addEventListener('pointerleave', hideTip);
+		new gl.Marker({ element: q.pin }).setLngLat(at((q.from + q.to) / 2)).addTo(map);
+	}
+	// A cover is shown once its stretch is long enough on screen to hold it, so zooming in brings more of them out.
+	const fit = () => {
+		const perPixel = (78271.517 * Math.cos(coords[0][0] * rad)) / 2 ** map.getZoom();
+		for (const q of songs) if (q.pin) q.pin.hidden = (q.to - q.from) / perPixel < 24;
+	};
+	map.on('zoom', fit);
+	map.on('load', fit);
+
+	// Each song wears the colour of its cover.
+	Promise.all(songs.map((q) => coverColor(q.song.image).then((color) => {
+		if (!color) return;
+		q.color = color;
+		if (q.pin) q.pin.style.borderColor = color;
+	}))).then(() => {
+		const source = map.getSource('songs');
+		if (source) source.setData({ type: 'FeatureCollection', features: songs.map((q) => line(stretch(q.from + length * 0.002, q.to - length * 0.002), { color: q.color })) });
+	});
+
+	// Which map, and whether it is tilted with the hills raised.
+	const kinds = MAP_STYLES.map(([label, style], i) =>
+		h('button', {
+			'aria-pressed': String(i === 0),
+			onclick: () => {
+				kinds.forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
+				map.setStyle(style);
+			},
+		}, label));
+	const tilt = h('button', {
+		class: 'tilt', 'aria-pressed': 'false', title: 'Tilt the map and raise the hills',
+		onclick: () => {
+			tilted = !tilted;
+			tilt.setAttribute('aria-pressed', String(tilted));
+			map.setTerrain(tilted ? { source: 'heights', exaggeration: 1.4 } : null);
+			map.easeTo({ pitch: tilted ? 62 : 0, bearing: tilted ? -20 : 0, duration: 900 });
+		},
+	}, '3D');
+	holder.append(h('div', { class: 'map-ui' }, h('div', { class: 'seg', role: 'group', 'aria-label': 'Map style' }, kinds), tilt));
+
+	// The map holds a graphics context; it is given back once the page has moved on.
+	const watch = setInterval(() => {
+		if (holder.isConnected) return;
+		clearInterval(watch);
+		map.remove();
+	}, 2000);
+}
+
 /**
  * The route with the songs laid along it. Each song colours the stretch of
  * road it played over (violet where it was faster than the activity's average,
@@ -615,7 +795,7 @@ function decodeRoute(text) {
  * The route has no times of its own, so a song is placed by distance: how far
  * in the activity was when it began and ended, as a share of the whole.
  */
-export function routeChart(container, polyline, act, streams, fmt) {
+function routeStill(container, polyline, act, streams, fmt) {
 	const coords = decodeRoute(polyline);
 	if (coords.length < 2) return;
 	const st = streams && streams.t && streams.t.length > 1 && streams.d[streams.d.length - 1] > 0 ? streams : null;
@@ -704,7 +884,7 @@ export function routeChart(container, polyline, act, streams, fmt) {
 			coverColor(c.song.image).then((color) => color && (ring.style.stroke = color));
 			const hit = s('rect', { class: 'hit', x: cx - c.size / 2 - 4, y: cy - c.size / 2 - 4, width: c.size + 8, height: c.size + 8 });
 			const tell = (evt) =>
-				showTip(evt, [tipSong(c.song, c.speed != null ? fmt.pace(c.speed) : '')]);
+				showTip(evt, [tipSong(c.song, c.speed != null ? (RUNS.includes(act.type) ? fmt.pace(c.speed) : fmt.speed(c.speed)) : '')]);
 			hit.addEventListener('pointermove', tell);
 			hit.addEventListener('pointerdown', tell);
 			hit.addEventListener('pointerleave', hideTip);

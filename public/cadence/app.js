@@ -589,9 +589,10 @@ function opened(act, fmt) {
 	const box = h('div', { class: 'chart' });
 	const note = h('p', { class: 'sub tally', hidden: true }, 'Speed, heart rate and the rest arrive with the next Strava check, within about 10 minutes.');
 	const music = act.songs.reduce((sum, s) => sum + (s.to - s.from), 0);
-	// Pace for everything that covers ground, rides as well as runs, so songs are read the same way on both.
-	const rateWord = 'pace';
-	const rate = (v) => fmt.pace(v);
+	// A run is read by its pace (m:ss a mile or kilometre), anything else by its speed.
+	const isRun = RUN_TYPES.includes(act.type);
+	const rateWord = isRun ? 'pace' : 'speed';
+	const rate = (v) => (isRun ? fmt.pace(v) : fmt.speed(v));
 	const facts = h('div', { class: 'facts' });
 	const ranked = h('div');
 	const mapBox = h('div', { class: 'route', hidden: true });
@@ -670,7 +671,7 @@ function opened(act, fmt) {
 		.then(({ streams, polyline }) => {
 			if (polyline) {
 				mapBox.hidden = false;
-				map = routeChart(mapBox, polyline, act, streams, fmt);
+				map = routeChart(mapBox, polyline, act, streams, fmt, state.me.mapbox);
 				const total = stretchStats(streams, 0, act.elapsed_s).distance;
 				const heard = act.songs.reduce((sum, song) => sum + (stretchStats(streams, song.from - act.start_time, song.to - act.start_time).distance || 0), 0);
 				if (total > 0 && act.songs.length) {
@@ -1017,7 +1018,6 @@ function emailsPage() {
 
 	return h('div', { class: 'wrap' },
 		header(),
-		h('a', { class: 'back', href: '#/' }, '← Back'),
 		h('h1', { class: 'title' }, me.user.is_demo ? 'Demo emails' : 'Emails'),
 		h('p', { class: 'when' }, me.user.is_demo ? 'What Cadence sends, filled in with the demo data.' : 'What Cadence sends, filled in with your own data.'),
 		emailSettings(),

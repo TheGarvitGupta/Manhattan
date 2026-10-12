@@ -479,6 +479,22 @@ a.fact:hover .who b { text-decoration: underline; }
 /* The route, with the songs along it. */
 .route { margin: 0 0 20px; border-radius: 14px; overflow: hidden; background: var(--wash); box-shadow: inset 0 0 0 1px var(--border); }
 .route .map { position: relative; overflow: hidden; }
+/* The live map (Mapbox): its height, the style switch over it, and the covers pinned along the route. */
+.route .map.live { height: 400px; }
+.route .map-ui { position: absolute; left: 10px; top: 10px; z-index: 2; display: flex; gap: 8px; }
+.route .map-ui .seg, .route .map-ui .tilt { border: 0; border-radius: 9px; background: #fff; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.25); overflow: hidden; }
+.route .map-ui button { border: 0; background: none; padding: 7px 11px; font-size: 13px; font-weight: 500; color: #333; }
+.route .map-ui button:hover { background: #f0f0f0; }
+.route .map-ui button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+.route .pin { width: 32px; height: 32px; padding: 0; border: 3px solid var(--accent); border-radius: 9px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); overflow: hidden; cursor: default; }
+.route .pin img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.route .end-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+.route .end-dot.begin { background: #111; border: 3px solid #fff; }
+.route .end-dot.finish { background: #fff; border: 3.5px solid #111; }
+@media (max-width: 640px) {
+	.route .map.live { height: 300px; }
+	.route .map-ui button { padding: 6px 8px; font-size: 12px; }
+}
 .route .tiles { position: absolute; inset: 0; }
 .route .tiles img { position: absolute; max-width: none; user-select: none; }
 /* The streets are quietened so the songs stand out, and turned dark with the rest of the page. */

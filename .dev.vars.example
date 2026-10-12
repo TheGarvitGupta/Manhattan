@@ -8,3 +8,6 @@ TOKEN_KEY=
 STRAVA_VERIFY_TOKEN=
 # Resend API key for sending email. Leave empty to keep sending off.
 RESEND_API_KEY=
+
+# Mapbox public token (pk.…) for the activity map. Optional: without it a still map is drawn.
+MAPBOX_TOKEN=

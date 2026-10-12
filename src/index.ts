@@ -126,6 +126,7 @@ async function me(env: Env, user: User) {
     spotify: conn('spotify'),
     counts,
     since: since?.t ?? null,
+    mapbox: env.MAPBOX_TOKEN ?? null,
     // Whether they have already asked the owner to be added to Spotify.
     access_requested: !!asked,
     email: { available: canSend(env), address: (user as EmailUser).email ?? null, confirmed: !!(user as EmailUser).email_confirmed_at },

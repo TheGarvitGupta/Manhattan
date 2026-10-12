@@ -11,6 +11,8 @@ export interface Env {
   STRAVA_POLL_MINUTES?: string;
   // Resend API key (a secret). Absent until email is set up, and then nothing is sent.
   RESEND_API_KEY?: string;
+  // Mapbox public token for the activity map (a secret only so it stays out of the repo). Absent, a still map is drawn.
+  MAPBOX_TOKEN?: string;
   // Where emails link back to; the cron has no request to read it from.
   PUBLIC_ORIGIN?: string;
 }
