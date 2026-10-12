@@ -716,13 +716,21 @@ function routeLive(gl, container, polyline, act, streams, fmt) {
 	let tilted = false;
 	const lay = () => {
 		if (map.getSource('road')) return;
-		// The pale style is all grey; parks are made a soft green and water a soft blue, as on Strava's map.
+		// The pale style is all grey and faint as it comes. It is given Strava's look: warm grey land under white
+		// streets, green parks, blue water, and names dark enough to read.
 		try {
 			if (map.getStyle().name === 'Mapbox Light') {
-				const green = '#d3ebc8';
-				if (map.getLayer('landuse')) map.setPaintProperty('landuse', 'fill-color', ['match', ['get', 'class'], ['park', 'pitch', 'grass', 'wood', 'scrub', 'golf_course', 'cemetery', 'national_park'], green, '#ececec']);
+				const green = '#bfe0aa';
+				for (const layer of map.getStyle().layers) {
+					if (layer.type === 'background') map.setPaintProperty(layer.id, 'background-color', '#eae8e3');
+					else if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) map.setPaintProperty(layer.id, 'text-color', layer.id.includes('water') ? '#4b7ea3' : layer.id.includes('poi') || layer.id.includes('natural') ? '#4d7a3c' : '#4a4a48');
+					else if (layer.type === 'fill' && layer.id.startsWith('land') && layer.id !== 'landuse') map.setPaintProperty(layer.id, 'fill-color', '#eae8e3');
+					else if (layer.type === 'fill' && layer.id.includes('building')) map.setPaintProperty(layer.id, 'fill-color', '#dfdcd5');
+				}
+				if (map.getLayer('landuse')) map.setPaintProperty('landuse', 'fill-color', ['match', ['get', 'class'], ['park', 'pitch', 'grass', 'wood', 'scrub', 'golf_course', 'cemetery', 'national_park'], green, '#e4e2dc']);
+				if (map.getLayer('landuse')) map.setPaintProperty('landuse', 'fill-opacity', 1);
 				if (map.getLayer('national-park')) map.setPaintProperty('national-park', 'fill-color', green);
-				if (map.getLayer('water')) map.setPaintProperty('water', 'fill-color', '#cfe2f1');
+				if (map.getLayer('water')) map.setPaintProperty('water', 'fill-color', '#b5d6ee');
 			}
 		} catch {}
 		map.addSource('road', { type: 'geojson', data: line(coords.map((p) => [p[1], p[0]])) });
