@@ -595,11 +595,6 @@ function opened(act, fmt) {
 	const facts = h('div', { class: 'facts' });
 	const ranked = h('div');
 	const mapBox = h('div', { class: 'route', hidden: true });
-	// What the two colours mean, on the route and on the chart alike.
-	const keys = h('p', { class: 'keys', hidden: true },
-		h('span', null, h('i', { class: 'up' }), 'Songs you went faster to than your average'),
-		h('span', null, h('i', { class: 'down' }), 'Slower'),
-	);
 	let map = null;
 
 	// One short line of figures under the name, in place of a row of boxes.
@@ -661,7 +656,6 @@ function opened(act, fmt) {
 			),
 		),
 		mapBox,
-		keys,
 		box,
 		note,
 		ranked,
@@ -679,7 +673,6 @@ function opened(act, fmt) {
 			chart.setStreams(streams);
 			fillFacts(streams);
 			fillRanked(streams);
-			keys.hidden = !(act.songs.length && stretchStats(streams, 0, act.elapsed_s).speed);
 			note.hidden = !!streams || !act.songs.length || state.me.user.is_demo;
 		})
 		.catch(() => {});

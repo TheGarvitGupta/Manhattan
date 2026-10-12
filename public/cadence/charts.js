@@ -665,7 +665,7 @@ export function routeChart(container, polyline, act, streams, fmt) {
 				showTip(evt, [
 					h('b', null, c.song.name),
 					h('div', { class: 't' }, c.song.artist),
-					c.speed != null ? h('div', { class: 't' }, `${fmt.pace(c.speed)} · ${c.up ? 'faster' : 'slower'} than average`) : null,
+					c.speed != null ? h('div', { class: 't' }, fmt.pace(c.speed)) : null,
 				].filter(Boolean));
 			hit.addEventListener('pointermove', tell);
 			hit.addEventListener('pointerdown', tell);
