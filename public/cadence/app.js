@@ -1,5 +1,6 @@
 import { GLYPHS, glyphFor } from './glyphs.js';
 import { activityChart, h, hideTip, minSec, runChart, s as svg, spectrum, stretchStats } from './charts.js';
+import { scene } from './scene.js';
 
 const app = document.getElementById('app');
 const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null, emailScenario: 'patterns' };
@@ -164,53 +165,16 @@ const ERRORS = {
 	failed: 'Something went wrong talking to Strava or Spotify. Please try again.',
 };
 
-/** A made-up run for the landing page: pace as a line, songs as blocks, one of them the fastest. */
-function sampleRun() {
-	const W = 640;
-	const songs = [[0, 96, 172], [100, 104, 28], [208, 88, 312], [300, 128, 258], [432, 92, 96], [528, 112, 200]]; // x, width, cover hue
-	const hot = 3;
-	const pace = [[0, 118], [40, 112], [96, 116], [150, 104], [204, 110], [250, 100], [296, 98], [330, 70], [372, 62], [410, 66], [432, 84], [480, 96], [524, 104], [580, 98], [640, 106]];
-	const el = svg('svg', { class: 'sample', viewBox: `0 0 ${W} 216`, role: 'img', 'aria-label': 'Example: your pace through a run, with the song that was playing underneath' });
-	songs.forEach(([x, w, hue], i) => {
-		el.append(
-			svg('rect', { class: i === hot ? 'band hot' : 'band', x: x + 1, y: 16, width: w - 2, height: 140, rx: 8 }),
-			svg('rect', { x: x + w / 2 - 17, y: 170, width: 34, height: 34, rx: 8, fill: `hsl(${hue} 62% 56%)` }),
-			svg('circle', { cx: x + w / 2 + 5, cy: 190, r: 7, fill: 'rgba(255,255,255,0.28)' }),
-		);
-	});
-	// Real covers over the coloured squares, a different handful each visit, once they arrive.
-	api('api/covers')
-		.then(({ covers }) =>
-			songs.forEach(([x, w], i) => {
-				if (!covers[i]) return;
-				const id = `cover-${i}`;
-				el.append(
-					svg('clipPath', { id }, svg('rect', { x: x + w / 2 - 17, y: 170, width: 34, height: 34, rx: 8 })),
-					svg('image', { href: covers[i], x: x + w / 2 - 17, y: 170, width: 34, height: 34, 'clip-path': `url(#${id})`, preserveAspectRatio: 'xMidYMid slice' }),
-				);
-			}),
-		)
-		.catch(() => {});
-	el.append(svg('path', { class: 'pace', d: pace.map(([x, y], i) => `${i ? 'L' : 'M'}${x} ${y}`).join('') }));
-	const [hx, hw] = songs[hot];
-	el.append(
-		svg('rect', { class: 'tag', x: hx + hw / 2 - 68, y: 24, width: 136, height: 26, rx: 13 }),
-		svg('text', { class: 'tag-text', x: hx + hw / 2, y: 41, 'text-anchor': 'middle' }, `Fastest · ${state.units === 'mi' ? '8:33 /mi' : '5:19 /km'}`),
-	);
-	return el;
-}
-
 function landing() {
 	const error = ERRORS[new URLSearchParams(location.search).get('error')];
 	if (error) history.replaceState(null, '', location.pathname);
 	const logo = (name) => svg('svg', { class: `mark ${name}`, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: MARKS[name] }));
 	const step = (icon, text) => h('span', { class: 'step' }, icon, text);
 
-	return h('div', { class: 'wrap' },
-		header(),
-		h('main', { class: 'landing' },
-			error && h('div', { class: 'card note error' }, h('p', null, error)),
-			emailNotice(),
+	// The words stand on a moving picture: a runner crossing a playlist, the run kept to the room left for it under them.
+	const room = h('div', { class: 'hero-run' });
+	const hero = h('div', { class: 'hero' },
+		h('div', { class: 'hero-copy' },
 			h('div', { class: 'joined' }, logo('strava'), 'Strava', h('i', null, '+'), logo('spotify'), 'Spotify'),
 			h('h1', null, 'Which songs make you run faster?'),
 			h('p', { class: 'lede' }, 'Your pace, song by song.'),
@@ -218,7 +182,18 @@ function landing() {
 				h('a', { class: 'btn strava', href: 'auth/strava' }, 'Connect with Strava'),
 				h('button', { class: 'btn', onclick: () => act(() => api('auth/demo', 'POST')) }, 'See the demo'),
 			),
-			h('div', { class: 'card sample-card' }, sampleRun()),
+		),
+		room,
+	);
+	// Real covers for the songs underfoot, a different handful each visit.
+	scene(hero, { room, units: () => state.units, covers: api('api/covers').then((r) => r.covers).catch(() => []) });
+
+	return h('div', { class: 'wrap' },
+		header(),
+		h('main', { class: 'landing' },
+			error && h('div', { class: 'card note error' }, h('p', null, error)),
+			emailNotice(),
+			hero,
 			h('div', { class: 'steps' },
 				step(logo('strava'), 'Connect Strava'),
 				h('i', { 'aria-hidden': 'true' }, '→'),

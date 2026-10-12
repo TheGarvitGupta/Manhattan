@@ -122,20 +122,22 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 
 /* --- landing ------------------------------------------------------------- */
 
-.landing { max-width: 720px; margin: 0 auto; padding: 5vh 0 40px; text-align: center; }
+.landing { padding: 4px 0 40px; text-align: center; }
 .landing h1 { font-size: clamp(36px, 6.4vw, 60px); line-height: 1.04; letter-spacing: -0.035em; margin-top: 18px; }
 .landing .lede { color: var(--ink-2); font-size: 20px; margin: 14px 0 26px; }
 .landing .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .joined { display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px 6px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 13px; font-weight: 600; }
 .joined .mark, .step .mark { width: 16px; height: 16px; }
 .joined i { font-style: normal; color: var(--muted); margin: 0 3px; }
-.sample-card { margin-top: 40px; padding: 22px 22px 16px; }
-.sample { display: block; width: 100%; height: auto; }
-.sample .band { fill: var(--band); }
-.sample .band.hot { fill: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
-.sample .pace { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
-.sample .tag { fill: var(--accent); }
-.sample .tag-text { fill: #fff; font: 600 13px system-ui, -apple-system, "Segoe UI", sans-serif; }
+/* The front page's words stand on a moving picture (scene.js): the canvas lies behind them, and the run keeps to .hero-run. */
+.hero { position: relative; isolation: isolate; overflow: hidden; border-radius: 24px; background: #3a27a8; color: #fff; }
+.hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+.hero-copy { max-width: 760px; margin: 0 auto; padding: clamp(36px, 7vw, 68px) 20px 0; }
+.hero .lede { color: rgba(255, 255, 255, 0.8); }
+.hero .joined, .hero .btn { color: var(--ink); }
+.hero .joined { border-color: transparent; }
+.hero .btn.strava { color: #fff; }
+.hero-run { height: clamp(250px, 34vw, 360px); }
 .steps { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 26px; color: var(--ink-2); font-size: 14px; font-weight: 500; }
 .steps > i { font-style: normal; color: var(--muted); }
 .step { display: inline-flex; align-items: center; gap: 7px; }
