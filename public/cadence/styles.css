@@ -460,14 +460,27 @@ a.fact:hover .who b { text-decoration: underline; }
 .opened .opened-head .sub { margin: 1px 0 10px; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--ink-2); font-size: 13px; }
 .facts b { color: var(--ink); font-size: 17px; font-weight: 650; letter-spacing: -0.01em; margin-right: 5px; font-variant-numeric: tabular-nums; }
-.route-slot:empty { display: none; }
-.route { width: 150px; height: 100px; flex: none; border-radius: 12px; overflow: hidden; background: color-mix(in srgb, var(--strava) 7%, var(--surface)); }
-.route svg { display: block; width: 100%; height: 100%; }
+/* The route, with the songs along it. */
+.route { margin: 0 0 22px; border-radius: 14px; overflow: hidden; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); background-image: radial-gradient(var(--axis) 1px, transparent 1.2px); background-size: 22px 22px; box-shadow: inset 0 0 0 1px var(--border); }
+.route svg { display: block; width: 100%; }
 .route path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.route .under { stroke: var(--surface); stroke-width: 9; }
-.route .way { stroke: var(--strava); stroke-width: 4; }
-.route .start { fill: var(--strava); stroke: var(--surface); stroke-width: 2.5; r: 6px; }
-.route .end { fill: var(--surface); stroke: var(--strava); stroke-width: 3; r: 6px; }
+.route .road-under { stroke: var(--surface); stroke-width: 12; }
+.route .road { stroke: var(--muted); stroke-width: 2; stroke-dasharray: 2 6; }
+.route .song-under { stroke: var(--surface); stroke-width: 12; }
+.route .song { stroke-width: 7; }
+.route .song.up { stroke: var(--faster); }
+.route .song.down { stroke: var(--axis); }
+.route .start { fill: var(--ink); stroke: var(--surface); stroke-width: 3; }
+.route .end { fill: var(--surface); stroke: var(--ink); stroke-width: 3; }
+.route .ring { fill: var(--surface); stroke-width: 2.5; }
+.route .ring.up { stroke: var(--faster); }
+.route .ring.down { stroke: var(--axis); }
+.route .hit { fill: transparent; cursor: default; }
+.keys { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0 0 6px; color: var(--ink-2); font-size: 13px; }
+.keys span { display: inline-flex; align-items: center; gap: 7px; }
+.keys i { width: 18px; height: 5px; border-radius: 3px; }
+.keys .up { background: var(--faster); }
+.keys .down { background: var(--axis); }
 .chart .lane { fill: var(--wash); }
 .chart .series.faint { stroke-width: 1.5; opacity: 0.45; }
 .chart .ring { fill: var(--surface); stroke-width: 2.5; }
@@ -498,8 +511,6 @@ a.fact:hover .who b { text-decoration: underline; }
 	.opened { padding: 18px 16px; }
 	.opened .opened-head { flex-wrap: wrap; }
 	.opened .opened-head .glyph-tile { display: none; }
-	.route { width: 100%; height: 120px; order: 3; }
-	.route-slot { flex-basis: 100%; }
 	.ranked li { grid-template-columns: 40px minmax(0, 1fr) 76px; gap: 4px 12px; }
 	.ranked .swing { grid-column: 2 / -1; grid-row: 2; height: 8px; }
 }

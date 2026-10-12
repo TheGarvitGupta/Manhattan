@@ -343,15 +343,13 @@ function measures(st, isRun, fmt) {
 			const b = Math.min(n - 1, i + 3);
 			const dm = st.m[b] - st.m[a];
 			const v = dm >= 0.4 * (st.t[b] - st.t[a]) && dm > 0 ? (st.d[b] - st.d[a]) / dm : 0;
-			if (isRun) return v > 0.8 ? fmt.unitMeters / v : null; // pace, seconds per km or mile
-			return (v * 3600) / fmt.unitMeters;
+			// Pace, seconds per km or mile, for rides as for runs; a stop leaves a gap in the line.
+			return v > 0.8 ? fmt.unitMeters / v : null;
 		});
 		// The whole activity's average, drawn across the panel as a dashed line.
 		const whole = st.m[n - 1] > 0 ? st.d[n - 1] / st.m[n - 1] : 0;
-		const average = whole > 0 ? (isRun ? fmt.unitMeters / whole : (whole * 3600) / fmt.unitMeters) : null;
-		out.push(isRun
-			? { title: `Pace, min/${fmt.unit}`, average, averageLabel: 'Average pace', color: 'var(--pace)', values, invert: true, steps: [10, 15, 20, 30, 60, 120, 300], tick: minSec, tip: (v) => [minSec(v), `/${fmt.unit}`] }
-			: { title: `Speed, ${fmt.per}`, average, averageLabel: 'Average speed', color: 'var(--pace)', values, tick: (v) => v, tip: (v) => [v.toFixed(1), fmt.per] });
+		const average = whole > 0 ? fmt.unitMeters / whole : null;
+		out.push({ title: `Pace, min/${fmt.unit}`, average, averageLabel: 'Average pace', color: 'var(--pace)', values, invert: true, steps: [10, 15, 20, 30, 60, 120, 300], tick: minSec, tip: (v) => [minSec(v), `/${fmt.unit}`] });
 	}
 	if (any(st.hr)) out.push({ title: 'Heart rate, bpm', color: 'var(--heart)', values: st.hr, tick: (v) => v, tip: (v) => [Math.round(v), 'bpm'] });
 	if (any(st.w)) out.push({ title: 'Power, watts', color: 'var(--power)', values: smooth(st.w, 2), tick: (v) => v, tip: (v) => [Math.round(v), 'W'] });
@@ -528,7 +526,7 @@ export function activityChart(container, act, fmt) {
 				// The song's own averages, so nothing needs a separate table.
 				const avg = stretchStats(streams, song.a, song.b);
 				const parts = [
-					avg.speed != null && (isRun ? fmt.pace(avg.speed) : fmt.speed(avg.speed)),
+					avg.speed != null && fmt.pace(avg.speed),
 					avg.hr != null && `${Math.round(avg.hr)} bpm`,
 					avg.watts != null && `${Math.round(avg.watts)} W`,
 				].filter(Boolean);
@@ -559,6 +557,123 @@ export function activityChart(container, act, fmt) {
 			redraw();
 		},
 	};
+}
+
+// --- route: where the activity went, and which song played where ------------------------
+
+/** Strava's encoded polyline, as [lat, lng] pairs. */
+function decodeRoute(text) {
+	const points = [];
+	let i = 0;
+	let lat = 0;
+	let lng = 0;
+	const next = () => {
+		let shift = 0;
+		let value = 0;
+		let byte;
+		do {
+			byte = text.charCodeAt(i++) - 63;
+			value |= (byte & 0x1f) << shift;
+			shift += 5;
+		} while (byte >= 0x20 && i < text.length);
+		return value & 1 ? ~(value >> 1) : value >> 1;
+	};
+	while (i < text.length) {
+		lat += next();
+		lng += next();
+		points.push([lat / 1e5, lng / 1e5]);
+	}
+	return points;
+}
+
+/**
+ * The route with the songs laid along it. Each song colours the stretch of
+ * road it played over (violet where it was faster than the activity's average,
+ * grey where slower) and its cover sits in the middle of that stretch. Road
+ * with no music is a thin dashed line.
+ *
+ * The route has no times of its own, so a song is placed by distance: how far
+ * in the activity was when it began and ended, as a share of the whole.
+ */
+export function routeChart(container, polyline, act, streams, fmt) {
+	const coords = decodeRoute(polyline);
+	if (coords.length < 2) return;
+	const st = streams && streams.t && streams.t.length > 1 && streams.d[streams.d.length - 1] > 0 ? streams : null;
+	// Degrees of longitude are narrower away from the equator; scaling them keeps the shape true.
+	const squeeze = Math.cos((coords[0][0] * Math.PI) / 180);
+	const xs = coords.map((p) => p[1] * squeeze);
+	const ys = coords.map((p) => -p[0]);
+	const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+
+	responsive(container, (width) => {
+		const height = width < 520 ? 250 : 340;
+		const pad = width < 520 ? 30 : 40;
+		const k = Math.min((width - 2 * pad) / (x1 - x0 || 1e-9), (height - 2 * pad) / (y1 - y0 || 1e-9));
+		const pts = coords.map((_, i) => [(width - (x1 - x0) * k) / 2 + (xs[i] - x0) * k, (height - (y1 - y0) * k) / 2 + (ys[i] - y0) * k]);
+		// How far along the line each point is, in pixels.
+		const along = [0];
+		for (let i = 1; i < pts.length; i++) along.push(along[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+		const length = along[along.length - 1] || 1;
+		const at = (dist) => {
+			const d = Math.max(0, Math.min(length, dist));
+			let i = 1;
+			while (i < pts.length - 1 && along[i] < d) i++;
+			const f = (d - along[i - 1]) / (along[i] - along[i - 1] || 1);
+			return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f];
+		};
+		const stretch = (from, to) => {
+			const inside = pts.filter((_, i) => along[i] > from && along[i] < to);
+			return [at(from), ...inside, at(to)].map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
+		};
+
+		const svg = s('svg', { viewBox: `0 0 ${width} ${height}`, height, role: 'img', 'aria-label': 'The route, with each song over the stretch it played on' });
+		const whole = stretch(0, length);
+		svg.append(s('path', { class: 'road-under', d: whole }), s('path', { class: 'road', d: whole }));
+
+		const covers = [];
+		if (st) {
+			const total = st.d[st.d.length - 1];
+			const average = stretchStats(st, 0, st.t[st.t.length - 1]).speed;
+			for (const song of act.songs) {
+				const [a, b] = [song.from - act.start_time, song.to - act.start_time];
+				const from = (interp(st.t, st.d, a) / total) * length;
+				const to = (interp(st.t, st.d, b) / total) * length;
+				const speed = stretchStats(st, a, b).speed;
+				if (to - from < 2) continue;
+				const up = speed != null && average != null && speed >= average;
+				// A hair's gap at each end keeps one song apart from the next.
+				const d = stretch(from + 1.5, to - 1.5);
+				svg.append(s('path', { class: 'song-under', d }), s('path', { class: `song ${up ? 'up' : 'down'}`, d }));
+				covers.push({ song, up, speed, at: at((from + to) / 2), size: Math.max(0, Math.min(width < 520 ? 26 : 34, (to - from) * 0.9)) });
+			}
+		}
+
+		const [start, end] = [pts[0], pts[pts.length - 1]];
+		svg.append(s('circle', { class: 'end', cx: end[0], cy: end[1], r: 6 }), s('circle', { class: 'start', cx: start[0], cy: start[1], r: 6 }));
+
+		// Covers go on last so they sit over the road, the slower ones under the faster.
+		covers.sort((p, q) => p.up - q.up);
+		for (const c of covers) {
+			if (c.size < 13 || !c.song.image) continue;
+			const [cx, cy] = c.at;
+			const r = Math.round(c.size / 4);
+			const img = s('image', { href: c.song.image, x: cx - c.size / 2, y: cy - c.size / 2, width: c.size, height: c.size, preserveAspectRatio: 'xMidYMid slice' });
+			img.style.clipPath = `inset(0 round ${r}px)`;
+			const ring = s('rect', { class: `ring ${c.up ? 'up' : 'down'}`, x: cx - c.size / 2 - 2.5, y: cy - c.size / 2 - 2.5, width: c.size + 5, height: c.size + 5, rx: r + 2.5 });
+			const hit = s('rect', { class: 'hit', x: cx - c.size / 2 - 4, y: cy - c.size / 2 - 4, width: c.size + 8, height: c.size + 8 });
+			const tell = (evt) =>
+				showTip(evt, [
+					h('b', null, c.song.name),
+					h('div', { class: 't' }, c.song.artist),
+					c.speed != null ? h('div', { class: 't' }, `${fmt.pace(c.speed)} · ${c.up ? 'faster' : 'slower'} than average`) : null,
+				].filter(Boolean));
+			hit.addEventListener('pointermove', tell);
+			hit.addEventListener('pointerdown', tell);
+			hit.addEventListener('pointerleave', hideTip);
+			svg.append(ring, img, hit);
+		}
+		return svg;
+	});
 }
 
 // --- spectrum: songs placed along one scale ---------------------------------------------

@@ -1,5 +1,5 @@
 import { GLYPHS, glyphFor } from './glyphs.js';
-import { activityChart, h, hideTip, minSec, runChart, s as svg, spectrum, stretchStats } from './charts.js';
+import { activityChart, h, hideTip, minSec, routeChart, runChart, s as svg, spectrum, stretchStats } from './charts.js';
 import { scene } from './scene.js';
 
 const app = document.getElementById('app');
@@ -583,67 +583,24 @@ function glyphTile(type) {
 		key ? svg('svg', { class: 'glyph', viewBox: '0 0 24 24' }, svg('path', { d: GLYPHS[key] })) : words(type)[0]);
 }
 
-/** Strava's encoded polyline, as [lat, lng] pairs. */
-function decodeRoute(text) {
-	const points = [];
-	let i = 0;
-	let lat = 0;
-	let lng = 0;
-	const next = () => {
-		let shift = 0;
-		let value = 0;
-		let byte;
-		do {
-			byte = text.charCodeAt(i++) - 63;
-			value |= (byte & 0x1f) << shift;
-			shift += 5;
-		} while (byte >= 0x20 && i < text.length);
-		return value & 1 ? ~(value >> 1) : value >> 1;
-	};
-	while (i < text.length) {
-		lat += next();
-		lng += next();
-		points.push([lat / 1e5, lng / 1e5]);
-	}
-	return points;
-}
-
-/** The outline of where an activity went: its route as a line, a dot where it began and a ring where it ended. */
-function routeMap(polyline) {
-	const points = decodeRoute(polyline);
-	if (points.length < 2) return null;
-	// Degrees of longitude are narrower away from the equator; scaling them keeps the shape true.
-	const squeeze = Math.cos((points[0][0] * Math.PI) / 180);
-	const xs = points.map((p) => p[1] * squeeze);
-	const ys = points.map((p) => -p[0]);
-	const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-	const span = Math.max(x1 - x0, y1 - y0) || 1;
-	const [W, H, pad] = [300, 200, 18];
-	const k = Math.min((W - 2 * pad) / ((x1 - x0) / span || 1), (H - 2 * pad) / ((y1 - y0) / span || 1));
-	const at = (i) => [(W - ((x1 - x0) / span) * k) / 2 + ((xs[i] - x0) / span) * k, (H - ((y1 - y0) / span) * k) / 2 + ((ys[i] - y0) / span) * k];
-	const d = points.map((_, i) => `${i ? 'L' : 'M'}${at(i).map((v) => v.toFixed(1)).join(' ')}`).join('');
-	const [a, b] = [at(0), at(points.length - 1)];
-	return h('div', { class: 'route' },
-		svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'The route' },
-			svg('path', { class: 'under', d }),
-			svg('path', { class: 'way', d }),
-			svg('circle', { class: 'end', cx: b[0], cy: b[1], r: 5 }),
-			svg('circle', { class: 'start', cx: a[0], cy: a[1], r: 5 }),
-		));
-}
-
 /** An opened activity: the activity across the page, its songs under it, and its data under those. */
 // Under the chart, each distinct song is listed once with its totals for the activity.
 function opened(act, fmt) {
 	const box = h('div', { class: 'chart' });
 	const note = h('p', { class: 'sub tally', hidden: true }, 'Speed, heart rate and the rest arrive with the next Strava check, within about 10 minutes.');
 	const music = act.songs.reduce((sum, s) => sum + (s.to - s.from), 0);
-	const isRun = RUN_TYPES.includes(act.type);
-	const rateWord = isRun ? 'pace' : 'speed';
-	const rate = (v) => (isRun ? fmt.pace(v) : fmt.speed(v));
+	// Pace for everything that covers ground, rides as well as runs, so songs are read the same way on both.
+	const rateWord = 'pace';
+	const rate = (v) => fmt.pace(v);
 	const facts = h('div', { class: 'facts' });
 	const ranked = h('div');
-	const mapSlot = h('div', { class: 'route-slot' });
+	const mapBox = h('div', { class: 'route', hidden: true });
+	// What the two colours mean, on the route and on the chart alike.
+	const keys = h('p', { class: 'keys', hidden: true },
+		h('span', null, h('i', { class: 'up' }), 'Songs you went faster to than your average'),
+		h('span', null, h('i', { class: 'down' }), 'Slower'),
+	);
+	let map = null;
 
 	// One short line of figures under the name, in place of a row of boxes.
 	const fillFacts = (streams) => {
@@ -702,8 +659,9 @@ function opened(act, fmt) {
 				h('p', { class: 'sub' }, `${dayName(act.start_time)}, ${clockTime(act.start_time)} – ${clockTime(act.start_time + act.elapsed_s)}`),
 				facts,
 			),
-			mapSlot,
 		),
+		mapBox,
+		keys,
 		box,
 		note,
 		ranked,
@@ -714,11 +672,14 @@ function opened(act, fmt) {
 	fillRanked(null);
 	api(`api/activities/${act.id}`)
 		.then(({ streams, polyline }) => {
-			const map = polyline && routeMap(polyline);
-			if (map) mapSlot.replaceChildren(map);
+			if (polyline) {
+				mapBox.hidden = false;
+				map = routeChart(mapBox, polyline, act, streams, fmt);
+			}
 			chart.setStreams(streams);
 			fillFacts(streams);
 			fillRanked(streams);
+			keys.hidden = !(act.songs.length && stretchStats(streams, 0, act.elapsed_s).speed);
 			note.hidden = !!streams || !act.songs.length || state.me.user.is_demo;
 		})
 		.catch(() => {});
