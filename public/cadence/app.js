@@ -4,7 +4,7 @@ import { scene } from './scene.js';
 
 const app = document.getElementById('app');
 // Running and biking are analysed apart: `insights` and `runs` each hold one of each ({ run, ride }), and `sport` is the tab that is open.
-const state = { me: null, insights: null, runs: null, recent: null, sport: 'run', sportChosen: false, units: 'km', allRuns: false, openActivity: null, filter: new Set(), emailScenario: 'patterns' };
+const state = { me: null, insights: null, runs: null, recent: null, sport: 'run', sportChosen: false, units: 'km', allRuns: false, openActivity: null, filter: new Set(), filterFor: null, emailScenario: 'patterns' };
 
 // Units: what the person picks here, else their Strava setting when Strava
 // shares it, else whatever the rest of garvitgupta.com is showing them: its
@@ -114,7 +114,9 @@ async function load() {
 		state.runs = { run: runs, ride: rides };
 		state.recent = recent;
 		// Until a tab is picked, open on the sport there is more of.
-		if (!state.sportChosen) state.sport = ride.totals.runs_with_music > run.totals.runs_with_music || (!runs.length && rides.length) ? 'ride' : 'run';
+		if (!state.sportChosen) {
+			state.sport = ride.totals.runs_with_music > run.totals.runs_with_music || (!runs.length && rides.length) ? 'ride' : 'run';
+		}
 	} catch (err) {
 		return fail(err);
 	}
@@ -690,6 +692,11 @@ document.addEventListener('keydown', (e) => e.key === 'Escape' && closeFilter &&
 
 /** Every activity and every song, side by side; opening an activity lays it out against its songs. */
 function latest(fmt) {
+	// The list starts on the open tab's kind, each time the tab changes; the filter's menu can widen it.
+	if (state.filterFor !== state.sport) {
+		state.filter = new Set([state.sport]);
+		state.filterFor = state.sport;
+	}
 	const { me, recent, filter } = state;
 	const open = recent.activities.find((a) => a.id === state.openActivity);
 
