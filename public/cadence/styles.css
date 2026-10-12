@@ -141,6 +141,8 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .hero .joined, .hero .btn, .hero .card { color: var(--ink); }
 .hero .joined { border-color: transparent; }
 .hero .btn.strava { color: #fff; }
+/* On the picture a hovered button stays solid: the usual see-through wash would let the violet through. */
+.hero .btn:not(.strava):hover { background: color-mix(in srgb, var(--surface) 88%, var(--ink)); }
 .hero .card { margin-bottom: 18px; }
 .hero-run { flex: 1; min-height: clamp(220px, 30vh, 360px); }
 .steps { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 26px; color: var(--ink-2); font-size: 14px; font-weight: 500; }
