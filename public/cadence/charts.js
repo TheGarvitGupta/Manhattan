@@ -716,6 +716,15 @@ function routeLive(gl, container, polyline, act, streams, fmt) {
 	let tilted = false;
 	const lay = () => {
 		if (map.getSource('road')) return;
+		// The pale style is all grey; parks are made a soft green and water a soft blue, as on Strava's map.
+		try {
+			if (map.getStyle().name === 'Mapbox Light') {
+				const green = '#d3ebc8';
+				if (map.getLayer('landuse')) map.setPaintProperty('landuse', 'fill-color', ['match', ['get', 'class'], ['park', 'pitch', 'grass', 'wood', 'scrub', 'golf_course', 'cemetery', 'national_park'], green, '#ececec']);
+				if (map.getLayer('national-park')) map.setPaintProperty('national-park', 'fill-color', green);
+				if (map.getLayer('water')) map.setPaintProperty('water', 'fill-color', '#cfe2f1');
+			}
+		} catch {}
 		map.addSource('road', { type: 'geojson', data: line(coords.map((p) => [p[1], p[0]])) });
 		map.addSource('songs', { type: 'geojson', data: { type: 'FeatureCollection', features: songs.map((q) => line(stretch(q.from + length * 0.002, q.to - length * 0.002), { color: q.color })) } });
 		const round = { 'line-cap': 'round', 'line-join': 'round' };
