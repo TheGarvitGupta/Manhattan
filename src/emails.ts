@@ -9,7 +9,7 @@
 // Email is written for mail clients: tables and inline styles only.
 
 import { buildInsights } from './insights';
-import { Env, now, User } from './util';
+import { Env, now, recast, User } from './util';
 
 export const FROM = { email: 'no-reply@cadence.garvitgupta.com', name: 'Cadence' };
 // Runs with music before the roundup switches from "collecting" to patterns.
@@ -243,14 +243,18 @@ async function weekly(env: Env, origin: string, user: EmailUser, unit: string, f
   const weekLine = `${plural(t.runs, 'run')}${t.runs ? `, ${u.dist(t.distance_m)}` : ''} and ${plural(t.songs, 'song')} this week.`;
 
   if (variant === 'collecting') {
-    const songs = (
-      await env.DB.prepare(
-        `SELECT p.played_at, t.name, t.artist, t.image FROM plays p JOIN tracks t ON t.id = p.track_id
-         WHERE p.user_id = ? ORDER BY p.played_at DESC LIMIT 10`,
-      )
-        .bind(user.id)
-        .all<{ played_at: number; name: string; artist: string; image: string | null }>()
-    ).results;
+    const songs = await recast(
+      env,
+      user,
+      (
+        await env.DB.prepare(
+          `SELECT p.played_at, t.name, t.artist, t.image FROM plays p JOIN tracks t ON t.id = p.track_id
+           WHERE p.user_id = ? ORDER BY p.played_at DESC LIMIT 10`,
+        )
+          .bind(user.id)
+          .all<{ played_at: number; name: string; artist: string; image: string | null }>()
+      ).results,
+    );
     const activities = (
       await env.DB.prepare(
         `SELECT a.name, a.type, a.start_time, a.elapsed_s, a.distance_m,

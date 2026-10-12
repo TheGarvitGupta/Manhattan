@@ -6,7 +6,7 @@ import { buildInsights } from './insights';
 import { SongInterval, songIntervals } from './match';
 import { accessToken, authorizeUrl, exchangeSpotifyCode, exchangeStravaCode, Provider, saveTokens, stravaDeauthorize } from './providers';
 import { syncAll, syncUser } from './sync';
-import { Env, getCookie, json, now, randomToken, redirect, setCookie, sha256Hex, User } from './util';
+import { Env, getCookie, json, now, randomToken, recast, redirect, setCookie, sha256Hex, User } from './util';
 
 const SESSION_COOKIE = 'cadence_sid';
 const STATE_COOKIE = 'cadence_oauth';
@@ -154,8 +154,8 @@ async function getRun(env: Env, user: User, id: number) {
      FROM run_songs rs JOIN tracks t ON t.id = rs.track_id WHERE rs.run_id = ? ORDER BY rs.idx`,
   )
     .bind(id)
-    .all();
-  return { ...run, streams: JSON.parse(run.streams), songs: songs.results };
+    .all<{ name: string; artist: string; image: string | null }>();
+  return { ...run, streams: JSON.parse(run.streams), songs: await recast(env, user, songs.results) };
 }
 
 interface RecentPlay {
@@ -196,15 +196,19 @@ async function recent(env: Env, user: User) {
   ).results;
 
   const playsBetween = async (from: number, to: number, limit: number) =>
-    (
-      await env.DB.prepare(
-        `SELECT p.played_at, p.track_id, t.duration_s, t.name, t.artist, t.image
-         FROM plays p JOIN tracks t ON t.id = p.track_id
-         WHERE p.user_id = ? AND p.played_at > ? AND p.played_at <= ? ORDER BY p.played_at DESC LIMIT ?`,
-      )
-        .bind(user.id, from, to, limit)
-        .all<RecentPlay>()
-    ).results;
+    recast(
+      env,
+      user,
+      (
+        await env.DB.prepare(
+          `SELECT p.played_at, p.track_id, t.duration_s, t.name, t.artist, t.image
+           FROM plays p JOIN tracks t ON t.id = p.track_id
+           WHERE p.user_id = ? AND p.played_at > ? AND p.played_at <= ? ORDER BY p.played_at DESC LIMIT ?`,
+        )
+          .bind(user.id, from, to, limit)
+          .all<RecentPlay>()
+      ).results,
+    );
   const describe = (i: SongInterval<RecentPlay>, from = i.from, to = i.to) => ({
     name: i.play.name,
     artist: i.play.artist,
@@ -308,7 +312,20 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     return json({ ok: true }, 200, { 'set-cookie': await startSession(req, env, demo.id) });
   }
 
+  // A few covers for the picture on the front page, drawn at random from the demo's songs. Open to all: it is shown signed out.
+  if (path === '/api/covers' && method === 'GET') {
+    const covers = await env.DB.prepare(
+      `SELECT image FROM tracks WHERE id LIKE 'sim:%' AND image LIKE 'https://%' ORDER BY RANDOM() LIMIT 6`,
+    ).all<{ image: string }>();
+    return json({ covers: covers.results.map((c) => c.image) });
+  }
+
   const user = await currentUser(req, env);
+  // The demo's songs are dealt afresh each time the page is opened: the page makes up a word and sends it with every request.
+  if (user?.is_demo) {
+    const cast = req.headers.get('x-cadence-cast') ?? url.searchParams.get('cast') ?? '';
+    if (/^[a-z0-9]{1,24}$/.test(cast)) user.cast = cast;
+  }
 
   if (path === '/auth/logout' && method === 'POST') {
     const sid = getCookie(req, SESSION_COOKIE);

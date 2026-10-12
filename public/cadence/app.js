@@ -5,11 +5,16 @@ const app = document.getElementById('app');
 const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null, emailScenario: 'patterns' };
 
 // Units: what the person picks here, else their Strava setting when Strava
-// shares it, else a guess from where their browser says they are.
-const MILE_REGIONS = ['US', 'GB', 'LR', 'MM'];
+// shares it, else whatever the rest of garvitgupta.com is showing them: its
+// own choice if they made one there, or miles where the device's time zone is
+// one that uses them (the same rule as the main site's js/units.js).
+const MILE_ZONES = /^(US\/|America\/(Adak|Anchorage|Atka|Boise|Chicago|Denver|Detroit|Fort_Wayne|Indiana\/|Indianapolis|Juneau|Kentucky\/|Knox_IN|Los_Angeles|Louisville|Menominee|Metlakatla|New_York|Nome|North_Dakota\/|Phoenix|Shiprock|Sitka|Yakutat)|Pacific\/(Honolulu|Johnston|Guam|Saipan|Pago_Pago|Samoa)$|Africa\/Monrovia$|Asia\/(Yangon|Rangoon)$)/;
 try {
-	const region = new Intl.Locale(navigator.language).maximize().region;
-	if (MILE_REGIONS.includes(region)) state.units = 'mi';
+	const site = localStorage.getItem('gg:units');
+	const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+	if (site === 'imperial' || site === 'metric') state.units = site === 'imperial' ? 'mi' : 'km';
+	else if (zone && zone.includes('/') && !zone.startsWith('Etc/')) state.units = MILE_ZONES.test(zone) ? 'mi' : 'km';
+	else if (['US', 'LR', 'MM'].includes(new Intl.Locale(navigator.language).maximize().region)) state.units = 'mi';
 } catch {}
 let unitsChosen = false;
 try {
@@ -54,8 +59,13 @@ const ago = (ts) => {
 
 // --- server -------------------------------------------------------------------
 
+// The demo's songs are dealt afresh each time the page is opened: a word made up here goes with every request, and the
+// server shuffles which song is which by it. Real accounts ignore it.
+const CAST = Math.random().toString(36).slice(2, 12);
+
 async function api(path, method = 'GET', payload) {
-	const res = await fetch(path, payload ? { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) } : { method });
+	const headers = { 'x-cadence-cast': CAST };
+	const res = await fetch(path, payload ? { method, headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(payload) } : { method, headers });
 	const body = await res.json().catch(() => ({}));
 	if (!res.ok) throw Object.assign(new Error(body.error || 'Something went wrong.'), { status: res.status });
 	return body;
@@ -163,11 +173,24 @@ function sampleRun() {
 			svg('circle', { cx: x + w / 2 + 5, cy: 190, r: 7, fill: 'rgba(255,255,255,0.28)' }),
 		);
 	});
+	// Real covers over the coloured squares, a different handful each visit, once they arrive.
+	api('api/covers')
+		.then(({ covers }) =>
+			songs.forEach(([x, w], i) => {
+				if (!covers[i]) return;
+				const id = `cover-${i}`;
+				el.append(
+					svg('clipPath', { id }, svg('rect', { x: x + w / 2 - 17, y: 170, width: 34, height: 34, rx: 8 })),
+					svg('image', { href: covers[i], x: x + w / 2 - 17, y: 170, width: 34, height: 34, 'clip-path': `url(#${id})`, preserveAspectRatio: 'xMidYMid slice' }),
+				);
+			}),
+		)
+		.catch(() => {});
 	el.append(svg('path', { class: 'pace', d: pace.map(([x, y], i) => `${i ? 'L' : 'M'}${x} ${y}`).join('') }));
 	const [hx, hw] = songs[hot];
 	el.append(
 		svg('rect', { class: 'tag', x: hx + hw / 2 - 68, y: 24, width: 136, height: 26, rx: 13 }),
-		svg('text', { class: 'tag-text', x: hx + hw / 2, y: 41, 'text-anchor': 'middle' }, 'Fastest · 5:19 /km'),
+		svg('text', { class: 'tag-text', x: hx + hw / 2, y: 41, 'text-anchor': 'middle' }, `Fastest · ${state.units === 'mi' ? '8:33 /mi' : '5:19 /km'}`),
 	);
 	return el;
 }
@@ -782,7 +805,7 @@ function emailSettings() {
 function emailsPage() {
 	const { me } = state;
 	const scenario = EMAIL_SCENARIOS.find((x) => x.id === state.emailScenario) || EMAIL_SCENARIOS[2];
-	const query = `?units=${state.units}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}${scenario.variant ? `&variant=${scenario.variant}` : ''}`;
+	const query = `?cast=${CAST}&units=${state.units}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}${scenario.variant ? `&variant=${scenario.variant}` : ''}`;
 
 	const subject = h('div', { class: 'subject' }, '…');
 	const to = h('span', null, me.user.name);

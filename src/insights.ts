@@ -4,7 +4,7 @@
 // on, so a song that only comes up on easy days isn't unfairly "slow". The
 // plain lists (fastest, most played, ...) use straightforward averages.
 
-import { Env, now, User } from './util';
+import { Env, now, recast, User } from './util';
 
 const MIN_SEGMENT_S = 30;
 // Everyone starts slow: a song that opens a run shouldn't be blamed for the warm-up.
@@ -112,16 +112,20 @@ export async function buildInsights(env: Env, user: User) {
       .all<RunRow>()
   ).results;
 
-  const rows = (
-    await env.DB.prepare(
-      `SELECT rs.run_id, rs.idx, rs.track_id, rs.start_s, rs.end_s, rs.distance_m, rs.moving_s, rs.avg_hr, rs.skipped,
-              t.name, t.artist, t.image
-       FROM run_songs rs JOIN runs r ON r.id = rs.run_id JOIN tracks t ON t.id = rs.track_id
-       WHERE r.user_id = ? ORDER BY r.start_time, rs.idx`,
-    )
-      .bind(user.id)
-      .all<SongRow>()
-  ).results;
+  const rows = await recast(
+    env,
+    user,
+    (
+      await env.DB.prepare(
+        `SELECT rs.run_id, rs.idx, rs.track_id, rs.start_s, rs.end_s, rs.distance_m, rs.moving_s, rs.avg_hr, rs.skipped,
+                t.name, t.artist, t.image
+         FROM run_songs rs JOIN runs r ON r.id = rs.run_id JOIN tracks t ON t.id = rs.track_id
+         WHERE r.user_id = ? ORDER BY r.start_time, rs.idx`,
+      )
+        .bind(user.id)
+        .all<SongRow>()
+    ).results,
+  );
 
   const perRun = new Map(runs.map((r) => [r.id, { ...r, speed: r.distance_m / r.moving_s, songs: 0, music_s: 0 }]));
 

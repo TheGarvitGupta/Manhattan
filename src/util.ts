@@ -25,6 +25,47 @@ export interface User {
   last_sync_at: number | null;
   // 'mi' or 'km' from Strava; null until asked, '-' if Strava gave no answer.
   units: string | null;
+  // Demo only, and never stored: which way round its songs are dealt for this visit (see recast).
+  cast?: string;
+}
+
+interface Billed {
+  name: string;
+  artist: string;
+  image: string | null;
+}
+
+/**
+ * The demo runner's songs trade places on every visit: the runs and the paces
+ * stay as simulated, but which song is the fast one is dealt afresh each time
+ * the page is opened. Rows are relabelled as they are read, before anything is
+ * added up, so every list and every artist total agrees with every other.
+ * Anyone else's rows pass through untouched.
+ */
+export async function recast<T extends Billed>(env: Env, user: User, rows: T[]): Promise<T[]> {
+  if (!user.is_demo || !user.cast) return rows;
+  const library = (await env.DB.prepare(`SELECT name, artist, image FROM tracks WHERE id LIKE 'sim:%' ORDER BY id`).all<Billed>()).results;
+  // A small seeded generator, so one visit always deals the same hand.
+  let seed = 0;
+  for (const ch of user.cast) seed = (Math.imul(seed, 31) + ch.charCodeAt(0)) | 0;
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const dealt = [...library];
+  for (let i = dealt.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [dealt[i], dealt[j]] = [dealt[j], dealt[i]];
+  }
+  const key = (b: Billed) => `${b.name}\n${b.artist}`;
+  const becomes = new Map(library.map((b, i) => [key(b), dealt[i]]));
+  for (const row of rows) {
+    const as = becomes.get(key(row));
+    if (as) Object.assign(row, { name: as.name, artist: as.artist, image: as.image });
+  }
+  return rows;
 }
 
 export const now = () => Math.floor(Date.now() / 1000);
