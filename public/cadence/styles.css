@@ -144,8 +144,6 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .landing .hero .lede { color: rgba(255, 255, 255, 0.78); font-size: clamp(16px, 1.8vw, 20px); margin: 8px 0 0; }
 .hero .actions { margin-top: clamp(20px, 3.4vh, 34px); gap: 10px; align-items: stretch; }
 .start, .hero .btn.demo { padding: 11px 17px 11px 19px; border-radius: 13px; font-size: 17px; gap: 8px; color: #fff; }
-.start { transition: transform 0.15s ease; }
-.start:hover { transform: translateY(-1px); }
 .start .mark.strava { width: 18px; height: 18px; fill: #fff; }
 .chevron { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s ease; }
 .start:hover .chevron { transform: translateX(3px); }
@@ -154,7 +152,7 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .hero .btn.demo:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
 .hero .card { margin-bottom: 18px; color: var(--ink); }
 .hero-run { flex: 1; min-height: clamp(240px, 34vh, 400px); }
-@media (prefers-reduced-motion: reduce) { .start, .chevron { transition: none; } .hero-brand:hover .wordmark span { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .chevron { transition: none; } .hero-brand:hover .wordmark span { animation: none; } }
 .steps { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 26px; color: var(--ink-2); font-size: 14px; font-weight: 500; }
 .steps > i { font-style: normal; color: var(--muted); }
 .step { display: inline-flex; align-items: center; gap: 7px; }
