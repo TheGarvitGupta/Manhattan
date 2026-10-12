@@ -615,7 +615,6 @@ function opened(act, fmt) {
 				h('h3', null, act.name),
 				h('p', { class: 'sub' }, `${kind(act)} · ${dayName(act.start_time)}, ${clockTime(act.start_time)} – ${clockTime(act.start_time + act.elapsed_s)} · ${duration(act.elapsed_s)}${act.distance_m ? ` · ${fmt.dist(act.distance_m)}` : ''}`),
 			),
-			h('button', { class: 'btn small', onclick: () => ((state.openActivity = null), render(true)) }, 'Close'),
 		),
 		box,
 		note,
@@ -664,6 +663,13 @@ function songsPill(songs) {
 	);
 }
 
+// Each activity opens at its own address (#/activity/<id>), so the browser's back and forward buttons work.
+// `cameFrom` is where the page was scrolled to when one was opened, to go back to.
+let cameFrom = 0;
+let openedHere = false;
+// Back retraces the step when the activity was opened from the list; a link straight to one goes to the front page.
+const closeActivity = () => (openedHere ? history.back() : (location.hash = '#/'));
+
 // The filter's menu closes when anything else is pressed.
 let closeFilter = null;
 document.addEventListener('click', () => closeFilter && closeFilter());
@@ -680,7 +686,7 @@ function latest(fmt) {
 	const open = recent.activities.find((a) => a.id === state.openActivity);
 
 	const activity = (a) =>
-		h('li', null, h('button', { class: `row${sportOf(a.type) ? '' : ' off'}`, onclick: () => ((state.openActivity = a.id), render(true)) },
+		h('li', null, h('button', { class: `row${sportOf(a.type) ? '' : ' off'}`, onclick: () => ((cameFrom = scrollY), (openedHere = true), (location.hash = `#/activity/${a.id}`)) },
 			glyphTile(a.type),
 			h('div', { class: 'who' },
 				h('div', { class: 'meta' }, h('b', null, a.name), h('span', { class: 'at' }, `${dayName(a.start_time)}, ${clockTime(a.start_time)}`)),
@@ -733,12 +739,12 @@ function latest(fmt) {
 	};
 	paint();
 
+	// An opened activity is shown by itself, with nothing over it.
+	if (open) return opened(open, fmt);
 	return h('section', { id: 'latest' },
 		h('h2', null, 'Activity'),
-		h('p', { class: 'sub' }, open ? 'What was playing, and for how long.' : 'Open an activity to see what was playing during it.'),
-		open
-			? opened(open, fmt)
-			: h('div', { class: 'pair' },
+		h('p', { class: 'sub' }, 'Open an activity to see what was playing during it.'),
+		h('div', { class: 'pair' },
 				h('div', { class: 'card' }, h('div', { class: 'card-head' }, chips.strava, count, h('div', { class: 'filter-box' }, toggle, menu)), listed),
 				h('div', { class: 'card' },
 					h('div', { class: 'card-head' }, chips.spotify, h('span', { class: 'count' }, plural(recent.songs.length, 'song'))),
@@ -810,6 +816,8 @@ function dashboard() {
 	// Until there are enough runs (or rides) with music for the song cards to mean anything, the page shows
 	// how many there are so far. Every activity and every song is listed under either.
 	const have = ins.totals.runs_with_music;
+	// An opened activity has the page to itself.
+	if (state.recent.activities.some((a) => a.id === state.openActivity)) return h('div', { class: 'wrap' }, header(), h('button', { class: 'back', onclick: closeActivity }, '← Back'), latest(fmt), footer());
 	const page = h('div', { class: 'wrap' }, header(), statusBar(true), notices(), sportTabs());
 	if (have < RUNS_NEEDED) page.append(collecting(sport, have));
 	else page.append(...story(ins, fmt, sport));
@@ -986,8 +994,13 @@ function render(keepScroll) {
 	const run = location.hash.match(/^#\/run\/(\d+)$/);
 	if (run) return runPage(run[1]);
 	if (location.hash === '#/emails') return app.replaceChildren(emailsPage());
+	const activity = location.hash.match(/^#\/activity\/(-?\d+)$/);
+	const wasOpen = state.openActivity != null;
+	state.openActivity = activity ? Number(activity[1]) : null;
 	app.replaceChildren(dashboard());
-	if (keepScroll !== true) scrollTo(0, 0);
+	// Leaving an activity lands back where the list was.
+	if (wasOpen && !activity) scrollTo(0, cameFrom);
+	else if (keepScroll !== true) scrollTo(0, 0);
 }
 
 addEventListener('hashchange', () => render());
