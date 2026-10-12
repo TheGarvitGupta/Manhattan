@@ -435,6 +435,8 @@ a.fact:hover .who b { text-decoration: underline; }
 .chart .actedge { fill: var(--strava); }
 .chart .songbar { fill: var(--spotify); fill-opacity: 0.24; }
 .chart .change { stroke: var(--axis); stroke-width: 1; }
+.chart line.mean { stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0.75; }
+.chart text.mean { fill: var(--ink); font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
 .chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart text.on { fill: var(--ink); font-weight: 600; font-size: 13px; }
 .tip .song.t { color: var(--muted); }

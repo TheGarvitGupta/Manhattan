@@ -346,9 +346,12 @@ function measures(st, isRun, fmt) {
 			if (isRun) return v > 0.8 ? fmt.unitMeters / v : null; // pace, seconds per km or mile
 			return (v * 3600) / fmt.unitMeters;
 		});
+		// The whole activity's average, drawn across the panel as a dashed line.
+		const whole = st.m[n - 1] > 0 ? st.d[n - 1] / st.m[n - 1] : 0;
+		const average = whole > 0 ? (isRun ? fmt.unitMeters / whole : (whole * 3600) / fmt.unitMeters) : null;
 		out.push(isRun
-			? { title: `Pace, min/${fmt.unit}`, color: 'var(--pace)', values, invert: true, steps: [10, 15, 20, 30, 60, 120, 300], tick: minSec, tip: (v) => [minSec(v), `/${fmt.unit}`] }
-			: { title: `Speed, ${fmt.per}`, color: 'var(--pace)', values, tick: (v) => v, tip: (v) => [v.toFixed(1), fmt.per] });
+			? { title: `Pace, min/${fmt.unit}`, average, averageLabel: 'Average pace', color: 'var(--pace)', values, invert: true, steps: [10, 15, 20, 30, 60, 120, 300], tick: minSec, tip: (v) => [minSec(v), `/${fmt.unit}`] }
+			: { title: `Speed, ${fmt.per}`, average, averageLabel: 'Average speed', color: 'var(--pace)', values, tick: (v) => v, tip: (v) => [v.toFixed(1), fmt.per] });
 	}
 	if (any(st.hr)) out.push({ title: 'Heart rate, bpm', color: 'var(--heart)', values: st.hr, tick: (v) => v, tip: (v) => [Math.round(v), 'bpm'] });
 	if (any(st.w)) out.push({ title: 'Power, watts', color: 'var(--power)', values: smooth(st.w, 2), tick: (v) => v, tip: (v) => [Math.round(v), 'W'] });
@@ -451,6 +454,12 @@ export function activityChart(container, act, fmt) {
 			const line = s('path', { class: 'series', d: path(xs, m.values.map((v) => (v == null ? null : m.y(v)))) });
 			line.style.stroke = m.color;
 			svg.append(line);
+			if (m.average != null && m.average >= m.lo && m.average <= m.hi) {
+				const y = m.y(m.average);
+				const mean = s('line', { class: 'mean', x1: L, x2: width - R, y1: y, y2: y });
+				mean.style.stroke = m.color;
+				svg.append(mean, s('text', { class: 'mean', x: width - R - 4, y: y - 6, 'text-anchor': 'end' }, `${m.averageLabel} ${m.tip(m.average).join(' ')}`));
+			}
 		});
 
 		// Hover: one crosshair for everything, read off in a single tooltip.

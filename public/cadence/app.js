@@ -673,9 +673,6 @@ function opened(act, fmt) {
 			row.hrN += st.hrN || 0;
 		}
 		const rows = [...bySong.values()].sort((a, b) => b.seconds - a.seconds);
-		// Each song is set against the whole activity's average.
-		const whole = stretchStats(streams, 0, act.elapsed_s).speed;
-		const against = (r) => (whole && r.moving >= 5 && r.distance > 0 ? versus(r.distance / r.moving / whole - 1) : dash());
 		const dash = () => h('span', { class: 'dim' }, '–');
 		const speed = (r) => (r.moving >= 5 && r.distance > 0 ? (isRun ? fmt.pace(r.distance / r.moving) : fmt.speed(r.distance / r.moving)) : dash());
 		table.replaceChildren(h('div', { class: 'scroll' }, h('table', { class: 'table' },
@@ -683,7 +680,6 @@ function opened(act, fmt) {
 				h('th', null, 'Song'),
 				h('th', { class: 'n' }, 'Played for'),
 				streams && h('th', { class: 'n' }, isRun ? 'Average pace' : 'Average speed'),
-				streams && sport && h('th', { class: 'n hide-s' }, 'Against average'),
 				streams && h('th', { class: 'n' }, 'Average heart rate'),
 			)),
 			h('tbody', null, rows.map((r) =>
@@ -691,7 +687,6 @@ function opened(act, fmt) {
 					h('td', null, h('div', { class: 'song' }, art(r.image, r.name, true), h('div', null, h('b', null, r.name), ' ', h('span', null, r.artist), r.plays > 1 ? h('span', { class: 'dim' }, ` · played ${r.plays} times`) : null))),
 					h('td', { class: 'n' }, minSec(r.seconds)),
 					streams && h('td', { class: 'n' }, speed(r)),
-					streams && sport && h('td', { class: 'n hide-s' }, against(r)),
 					streams && h('td', { class: 'n' }, r.hrN ? `${Math.round(r.hrSum / r.hrN)} bpm` : dash()),
 				),
 			)),
