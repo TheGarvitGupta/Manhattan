@@ -141,7 +141,7 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .hero-brand .wordmark .tall { color: #ffd24a; }
 .hero-brand:hover .wordmark span { animation: bob 0.5s ease-in-out; }
 .landing .hero h1 { font-size: clamp(22px, 3.3vw, 36px); line-height: 1.15; letter-spacing: -0.025em; margin-top: clamp(16px, 2.6vh, 28px); }
-.landing .hero .lede { color: rgba(255, 255, 255, 0.78); font-size: clamp(16px, 1.8vw, 20px); margin: 8px 0 0; }
+.landing .hero .lede { color: rgba(255, 255, 255, 0.78); font-size: clamp(15px, 1.6vw, 18px); line-height: 1.45; max-width: 30em; margin: 10px 0 0; text-wrap: balance; }
 .hero .actions { margin-top: clamp(20px, 3.4vh, 34px); gap: 10px; align-items: stretch; }
 .start, .hero .btn.demo { padding: 11px 17px 11px 19px; border-radius: 13px; font-size: 17px; gap: 8px; color: #fff; }
 .start .mark.strava { width: 18px; height: 18px; fill: #fff; }

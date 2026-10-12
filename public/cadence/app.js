@@ -179,7 +179,7 @@ function landing() {
 			emailNotice(),
 			h('div', { class: 'hero-brand', role: 'img', 'aria-label': 'Cadence' }, h('img', { src: 'icon.svg', alt: '' }), wordmark()),
 			h('h1', null, 'Which songs make you run faster?'),
-			h('p', { class: 'lede' }, 'Your pace, song by song.'),
+			h('p', { class: 'lede' }, 'Cadence matches your Strava runs to what was playing on Spotify, and shows your pace song by song.'),
 			h('div', { class: 'actions' },
 				h('a', { class: 'btn strava start', href: 'auth/strava', 'aria-label': 'Start: connect with Strava' },
 					logo('strava'),
