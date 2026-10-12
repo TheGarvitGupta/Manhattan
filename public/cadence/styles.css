@@ -451,3 +451,5 @@ button.back { border: 0; background: none; padding: 0; cursor: pointer; }
 	.card { padding: 16px; }
 }
 .table td.dim { white-space: nowrap; }
+
+.opened .tiles { margin-bottom: 12px; }
