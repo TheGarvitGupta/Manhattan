@@ -151,8 +151,20 @@ function wordmark() {
 	return h('span', { class: 'wordmark', 'aria-hidden': 'true' }, [...'cadence'].map((letter, i) => h('span', { class: letter === 'd' ? 'tall' : null, style: { animationDelay: `${i * 55}ms` } }, letter)));
 }
 
+// The account menu's icons, drawn as lines.
+const MENU_ICONS = {
+	sync: 'M20 11a8 8 0 0 0-14.3-4.5M4 4v3.5h3.5M4 13a8 8 0 0 0 14.3 4.5M20 20v-3.5h-3.5',
+	mail: 'M4 6.5h16v11H4zM4.5 7l7.5 6 7.5-6',
+	unlink: 'M10.5 6.5l1-1a4 4 0 0 1 5.7 5.7l-1 1M13.5 17.5l-1 1a4 4 0 0 1-5.7-5.7l1-1M4 4l16 16',
+	leave: 'M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l4 4-4 4M19 12H9',
+	trash: 'M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12M10.5 10.5v5.5M13.5 10.5v5.5',
+};
+
 function header() {
 	const me = state.me;
+	const item = (icon, label, onclick, cls) =>
+		h('button', { class: cls, onclick }, svg('svg', { class: 'icon', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: MENU_ICONS[icon] })), label);
+	const rule = () => h('hr');
 	const unitButton = (u) =>
 		h('button', {
 			'aria-pressed': String(state.units === u),
@@ -172,11 +184,14 @@ function header() {
 		me && h('details', { class: 'menu' },
 			h('summary', null, me.user.avatar ? h('img', { class: 'avatar', src: me.user.avatar, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { class: 'avatar' }), me.user.name),
 			h('div', { class: 'sheet' },
-				!me.user.is_demo && h('button', { onclick: () => act(() => api('api/sync', 'POST')) }, 'Sync now'),
-				h('button', { onclick: () => (location.hash = '#/emails') }, 'Emails'),
-				!me.user.is_demo && me.spotify.connected && h('button', { onclick: () => confirm('Disconnect Spotify? Songs already matched are kept.') && act(() => api('api/spotify', 'DELETE')) }, 'Disconnect Spotify'),
-				h('button', { onclick: () => act(() => api('auth/logout', 'POST')) }, me.user.is_demo ? 'Leave the demo' : 'Sign out'),
-				!me.user.is_demo && h('button', { class: 'danger', onclick: () => confirm('Delete your account and everything Cadence has stored about you? This cannot be undone.') && act(() => api('api/account', 'DELETE')) }, 'Delete my account'),
+				!me.user.is_demo && item('sync', 'Sync now', () => act(() => api('api/sync', 'POST'))),
+				item('mail', 'Emails', () => (location.hash = '#/emails')),
+				!me.user.is_demo && me.spotify.connected && rule(),
+				!me.user.is_demo && me.spotify.connected && item('unlink', 'Disconnect Spotify', () => confirm('Disconnect Spotify? Songs already matched are kept.') && act(() => api('api/spotify', 'DELETE'))),
+				rule(),
+				item('leave', me.user.is_demo ? 'Leave the demo' : 'Sign out', () => act(() => api('auth/logout', 'POST'))),
+				!me.user.is_demo && rule(),
+				!me.user.is_demo && item('trash', 'Delete my account', () => confirm('Delete your account and everything Cadence has stored about you? This cannot be undone.') && act(() => api('api/account', 'DELETE')), 'danger'),
 			),
 		),
 	);
