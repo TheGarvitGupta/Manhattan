@@ -596,6 +596,8 @@ function opened(act, fmt) {
 	const ranked = h('div');
 	const mapBox = h('div', { class: 'route', hidden: true });
 	let map = null;
+	// The map is by distance and the chart by time, which can look at odds after a stop; this says so.
+	const mapNote = h('p', { class: 'sub map-note', hidden: true });
 
 	// One short line of figures under the name, in place of a row of boxes.
 	const fillFacts = (streams) => {
@@ -629,17 +631,13 @@ function opened(act, fmt) {
 		const rows = [...bySong.values()].map((r) => ({ ...r, speed: r.moving >= 5 && r.distance > 0 ? r.distance / r.moving : null }));
 		const paced = whole && rows.some((r) => r.speed);
 		rows.sort((x, y) => (paced ? (y.speed ?? -1) - (x.speed ?? -1) : y.seconds - x.seconds));
-		const widest = Math.max(0.02, ...rows.map((r) => (r.speed ? Math.abs(r.speed / whole - 1) : 0)));
 		ranked.replaceChildren(
 			h('h4', null, paced ? 'Fastest to slowest' : 'What played'),
-			h('p', { class: 'sub' }, paced ? `Each song's ${rateWord} against the average for this ${sportOf(act.type) || 'activity'}, the line down the middle.` : `${plural(rows.length, 'song')}, longest first.`),
+			h('p', { class: 'sub' }, paced ? `Your ${rateWord} while each song played.` : `${plural(rows.length, 'song')}, longest first.`),
 			h('ol', { class: `ranked${paced ? '' : ' plain'}` }, rows.map((r) => {
-				const rel = r.speed ? r.speed / whole - 1 : null;
 				return h('li', null,
 					art(r.image, r.name, 'md'),
 					h('div', { class: 'who' }, h('b', null, r.name), h('span', null, `${r.artist} · ${minSec(r.seconds)}${r.plays > 1 ? ` · ${r.plays} times` : ''}`)),
-					paced && h('div', { class: 'swing', 'aria-hidden': 'true' },
-						rel != null && h('i', { class: rel >= 0 ? 'up' : 'down', style: { width: `${(Math.abs(rel) / widest) * 50}%` } })),
 					paced && h('b', { class: 'num' }, r.speed ? rate(r.speed) : '–'),
 				);
 			})),
@@ -656,6 +654,7 @@ function opened(act, fmt) {
 			),
 		),
 		mapBox,
+		mapNote,
 		box,
 		note,
 		ranked,
@@ -669,6 +668,12 @@ function opened(act, fmt) {
 			if (polyline) {
 				mapBox.hidden = false;
 				map = routeChart(mapBox, polyline, act, streams, fmt);
+				const total = stretchStats(streams, 0, act.elapsed_s).distance;
+				const heard = act.songs.reduce((sum, song) => sum + (stretchStats(streams, song.from - act.start_time, song.to - act.start_time).distance || 0), 0);
+				if (total > 0 && act.songs.length) {
+					mapNote.textContent = `Music played over ${fmt.dist(Math.min(heard, total))} of ${fmt.dist(total)}. The map shows where on the road each song played; the chart below shows when.`;
+					mapNote.hidden = false;
+				}
 			}
 			chart.setStreams(streams);
 			fillFacts(streams);

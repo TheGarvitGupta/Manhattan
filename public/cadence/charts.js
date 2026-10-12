@@ -343,8 +343,8 @@ function measures(st, isRun, fmt) {
 			const b = Math.min(n - 1, i + 3);
 			const dm = st.m[b] - st.m[a];
 			const v = dm >= 0.4 * (st.t[b] - st.t[a]) && dm > 0 ? (st.d[b] - st.d[a]) / dm : 0;
-			// Pace, seconds per km or mile, for rides as for runs; a stop leaves a gap in the line.
-			return v > 0.8 ? fmt.unitMeters / v : null;
+			// Pace, seconds per km or mile, for rides as for runs. A stop or a crawl leaves a gap in the line, so it does not stretch the scale.
+			return v > (isRun ? 0.8 : 1.8) ? fmt.unitMeters / v : null;
 		});
 		// The whole activity's average, drawn across the panel as a dashed line.
 		const whole = st.m[n - 1] > 0 ? st.d[n - 1] / st.m[n - 1] : 0;
@@ -421,7 +421,10 @@ export function activityChart(container, act, fmt) {
 		for (const song of songs) {
 			const x0 = x(song.a);
 			const w = Math.max(3, x(song.b) - x0 - 2);
-			svg.append(s('rect', { class: 'songbar', x: x0, y: songY, width: w, height: laneH, rx: Math.min(8, w / 2) }));
+			const bar = s('rect', { class: 'songbar', x: x0, y: songY, width: w, height: laneH, rx: Math.min(8, w / 2) });
+			// Each song wears the colour of its cover, here and on the map.
+			coverColor(song.image).then((color) => color && (bar.style.fill = color));
+			svg.append(bar);
 			const hasArt = !!song.image && w >= 30;
 			if (hasArt) {
 				const img = s('image', { href: song.image, x: x0 + 5, y: songY + 5, width: 26, height: 26, preserveAspectRatio: 'xMidYMid slice' });
@@ -456,21 +459,7 @@ export function activityChart(container, act, fmt) {
 			for (const v of m === lead ? m.ticks : [m.ticks[0], m.ticks[m.ticks.length - 1]]) svg.append(s('line', { class: 'grid', x1: L, x2: width - R, y1: m.y(v), y2: m.y(v) }), s('text', { x: L - 8, y: m.y(v) + 4, 'text-anchor': 'end' }, m.tick(v)));
 			const line = s('path', { class: 'series', d: path(xs, m.values.map((v) => (v == null ? null : m.y(v)))) });
 			line.style.stroke = m.color;
-			if (m === lead && songs.length) line.classList.add('faint');
 			svg.append(line);
-			if (m === lead) {
-				// Each song's own average, as a bold step over its stretch: higher is faster.
-				for (const song of songs) {
-					const avg = stretchStats(streams, song.a, song.b).speed;
-					if (!avg) continue;
-					const v = fmt.unitMeters / avg;
-					const faster = v < m.average;
-					const [x0, x1, y] = [x(song.a) + 1, x(song.b) - 3, m.y(v)];
-					if (x1 - x0 < 3) continue;
-					svg.append(s('line', { class: 'step', x1: x0, x2: x1, y1: y, y2: y }));
-					if (x1 - x0 >= 40) svg.append(s('text', { class: 'stepv', x: (x0 + x1) / 2, y: faster ? y - 8 : y + 17, 'text-anchor': 'middle' }, m.tip(v)[0]));
-				}
-			}
 			if (m.average != null && m.average >= m.lo && m.average <= m.hi) {
 				const y = m.y(m.average);
 				const mean = s('line', { class: 'mean', x1: L, x2: width - R, y1: y, y2: y });
@@ -552,6 +541,53 @@ export function activityChart(container, act, fmt) {
 
 // --- route: where the activity went, and which song played where ------------------------
 
+// A colour for each song, taken from its cover: the strongest colour in it, kept bright enough to draw with.
+const coverColors = new Map();
+export function coverColor(url) {
+	if (!url) return Promise.resolve(null);
+	if (!coverColors.has(url)) {
+		coverColors.set(url, new Promise((resolve) => {
+			const img = new Image();
+			img.crossOrigin = 'anonymous';
+			img.onerror = () => resolve(null);
+			img.onload = () => {
+				try {
+					const size = 12;
+					const canvas = document.createElement('canvas');
+					canvas.width = canvas.height = size;
+					const ctx = canvas.getContext('2d', { willReadFrequently: true });
+					ctx.drawImage(img, 0, 0, size, size);
+					const px = ctx.getImageData(0, 0, size, size).data;
+					let [r, g, b, total] = [0, 0, 0, 0];
+					for (let i = 0; i < px.length; i += 4) {
+						const [hi, lo] = [Math.max(px[i], px[i + 1], px[i + 2]), Math.min(px[i], px[i + 1], px[i + 2])];
+						const light = (hi + lo) / 510;
+						const sat = hi === lo ? 0 : (hi - lo) / (255 - Math.abs(hi + lo - 255));
+						// Strong, mid-bright pixels count for most; greys and near-black or near-white for little.
+						const weight = sat * sat * (1 - Math.abs(light - 0.5) * 1.4) + 0.004;
+						r += px[i] * weight;
+						g += px[i + 1] * weight;
+						b += px[i + 2] * weight;
+						total += weight;
+					}
+					[r, g, b] = [r / total, g / total, b / total];
+					const [hi, lo] = [Math.max(r, g, b), Math.min(r, g, b)];
+					let hue = 0;
+					if (hi !== lo) hue = hi === r ? ((g - b) / (hi - lo)) % 6 : hi === g ? (b - r) / (hi - lo) + 2 : (r - g) / (hi - lo) + 4;
+					const sat = hi === lo ? 0 : (hi - lo) / (255 - Math.abs(hi + lo - 255));
+					const light = (hi + lo) / 510;
+					resolve(sat < 0.12 ? 'hsl(0 0% 38%)' : `hsl(${Math.round(hue * 60 + 360) % 360} ${Math.round(Math.max(55, sat * 100))}% ${Math.round(Math.min(54, Math.max(40, light * 100)))}%)`);
+				} catch {
+					resolve(null);
+				}
+			};
+			// The small cover is plenty for a colour.
+			img.src = url.replace('ab67616d00001e02', 'ab67616d00004851');
+		}));
+	}
+	return coverColors.get(url);
+}
+
 /** Strava's encoded polyline, as [lat, lng] pairs. */
 function decodeRoute(text) {
 	const points = [];
@@ -590,17 +626,36 @@ export function routeChart(container, polyline, act, streams, fmt) {
 	const coords = decodeRoute(polyline);
 	if (coords.length < 2) return;
 	const st = streams && streams.t && streams.t.length > 1 && streams.d[streams.d.length - 1] > 0 ? streams : null;
-	// Degrees of longitude are narrower away from the equator; scaling them keeps the shape true.
-	const squeeze = Math.cos((coords[0][0] * Math.PI) / 180);
-	const xs = coords.map((p) => p[1] * squeeze);
-	const ys = coords.map((p) => -p[0]);
+	// Web Mercator, the projection the map tiles are drawn in: the world is a square one unit across.
+	const xs = coords.map((p) => (p[1] + 180) / 360);
+	const ys = coords.map((p) => (1 - Math.log(Math.tan((p[0] * Math.PI) / 180) + 1 / Math.cos((p[0] * Math.PI) / 180)) / Math.PI) / 2);
 	const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
 
 	responsive(container, (width) => {
-		const height = width < 520 ? 250 : 340;
-		const pad = width < 520 ? 30 : 40;
-		const k = Math.min((width - 2 * pad) / (x1 - x0 || 1e-9), (height - 2 * pad) / (y1 - y0 || 1e-9));
-		const pts = coords.map((_, i) => [(width - (x1 - x0) * k) / 2 + (xs[i] - x0) * k, (height - (y1 - y0) * k) / 2 + (ys[i] - y0) * k]);
+		const height = width < 520 ? 260 : 360;
+		const pad = width < 520 ? 34 : 48;
+		// The zoom that fits the route is rarely a whole number: tiles of the zoom above are drawn a little smaller, which keeps them sharp.
+		const zoom = Math.min(18, Math.log2(Math.min((width - 2 * pad) / (x1 - x0 || 1e-9), (height - 2 * pad) / (y1 - y0 || 1e-9)) / 256));
+		const z = Math.max(0, Math.min(19, Math.ceil(zoom)));
+		const world = 256 * 2 ** zoom;
+		const tile = 256 * 2 ** (zoom - z);
+		const left = ((x0 + x1) / 2) * world - width / 2;
+		const top = ((y0 + y1) / 2) * world - height / 2;
+		const pts = coords.map((_, i) => [xs[i] * world - left, ys[i] * world - top]);
+
+		// The streets underneath are OpenStreetMap's own tiles.
+		const ground = h('div', { class: 'tiles', 'aria-hidden': 'true' });
+		const n = 2 ** z;
+		for (let ty = Math.floor(top / tile); ty * tile < top + height; ty++) {
+			if (ty < 0 || ty >= n) continue;
+			for (let tx = Math.floor(left / tile); tx * tile < left + width; tx++) {
+				const img = h('img', { src: `https://tile.openstreetmap.org/${z}/${((tx % n) + n) % n}/${ty}.png`, alt: '', draggable: 'false' });
+				Object.assign(img.style, { left: `${Math.round(tx * tile - left)}px`, top: `${Math.round(ty * tile - top)}px`, width: `${Math.ceil(tile) + 1}px`, height: `${Math.ceil(tile) + 1}px` });
+				ground.append(img);
+			}
+		}
+		const credit = h('p', { class: 'credit' }, '© ', h('a', { href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener' }, 'OpenStreetMap contributors'));
+
 		// How far along the line each point is, in pixels.
 		const along = [0];
 		for (let i = 1; i < pts.length; i++) along.push(along[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
@@ -634,7 +689,9 @@ export function routeChart(container, polyline, act, streams, fmt) {
 				const up = speed != null && average != null && speed >= average;
 				// A hair's gap at each end keeps one song apart from the next.
 				const d = stretch(from + 1.5, to - 1.5);
-				svg.append(s('path', { class: 'song-under', d }), s('path', { class: `song ${up ? 'up' : 'down'}`, d }));
+				const line = s('path', { class: 'song', d });
+				coverColor(song.image).then((color) => color && (line.style.stroke = color));
+				svg.append(s('path', { class: 'song-under', d }), line);
 				covers.push({ song, up, speed, at: at((from + to) / 2), size: Math.max(0, Math.min(width < 520 ? 26 : 34, (to - from) * 0.9)) });
 			}
 		}
@@ -650,7 +707,8 @@ export function routeChart(container, polyline, act, streams, fmt) {
 			const r = Math.round(c.size / 4);
 			const img = s('image', { href: c.song.image, x: cx - c.size / 2, y: cy - c.size / 2, width: c.size, height: c.size, preserveAspectRatio: 'xMidYMid slice' });
 			img.style.clipPath = `inset(0 round ${r}px)`;
-			const ring = s('rect', { class: `ring ${c.up ? 'up' : 'down'}`, x: cx - c.size / 2 - 2.5, y: cy - c.size / 2 - 2.5, width: c.size + 5, height: c.size + 5, rx: r + 2.5 });
+			const ring = s('rect', { class: 'ring', x: cx - c.size / 2 - 2.5, y: cy - c.size / 2 - 2.5, width: c.size + 5, height: c.size + 5, rx: r + 2.5 });
+			coverColor(c.song.image).then((color) => color && (ring.style.stroke = color));
 			const hit = s('rect', { class: 'hit', x: cx - c.size / 2 - 4, y: cy - c.size / 2 - 4, width: c.size + 8, height: c.size + 8 });
 			const tell = (evt) =>
 				showTip(evt, [
@@ -663,7 +721,9 @@ export function routeChart(container, polyline, act, streams, fmt) {
 			hit.addEventListener('pointerleave', hideTip);
 			svg.append(ring, img, hit);
 		}
-		return svg;
+		const frame = h('div', { class: 'map' }, ground, svg, credit);
+		frame.style.height = `${height}px`;
+		return frame;
 	});
 }
 
