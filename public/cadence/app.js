@@ -810,7 +810,7 @@ function dashboard() {
 	// Until there are enough runs (or rides) with music for the song cards to mean anything, the page shows
 	// how many there are so far. Every activity and every song is listed under either.
 	const have = ins.totals.runs_with_music;
-	const page = h('div', { class: 'wrap' }, header(), statusBar(!state.recent.activities.some((a) => a.id === state.openActivity)), notices(), sportTabs());
+	const page = h('div', { class: 'wrap' }, header(), statusBar(true), notices(), sportTabs());
 	if (have < RUNS_NEEDED) page.append(collecting(sport, have));
 	else page.append(...story(ins, fmt, sport));
 	page.append(latest(fmt), footer());
