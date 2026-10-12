@@ -66,7 +66,12 @@ const CAST = Math.random().toString(36).slice(2, 12);
 async function api(path, method = 'GET', payload) {
 	const headers = { 'x-cadence-cast': CAST };
 	const res = await fetch(path, payload ? { method, headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(payload) } : { method, headers });
-	const body = await res.json().catch(() => ({}));
+	// Covers are stored as Spotify's 64px thumbnails; ask for the 300px picture of the same cover instead, which stays sharp at every size shown here.
+	const text = (await res.text().catch(() => '')).replaceAll('/image/ab67616d00004851', '/image/ab67616d00001e02');
+	let body = {};
+	try {
+		body = JSON.parse(text);
+	} catch {}
 	if (!res.ok) throw Object.assign(new Error(body.error || 'Something went wrong.'), { status: res.status });
 	return body;
 }
