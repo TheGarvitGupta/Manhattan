@@ -613,7 +613,8 @@ function decodeRoute(text) {
 // script or blob worker, so the page's content policy stays strict. The token is a public one; the server hands it over
 // with the account (it is a Worker secret, MAPBOX_TOKEN), so it is not written in the code.
 const MAP_STYLES = [
-	['Standard', 'mapbox://styles/mapbox/outdoors-v12'],
+	// The pale style, so the songs are the colour on the map.
+	['Standard', 'mapbox://styles/mapbox/light-v11'],
 	['Satellite', 'mapbox://styles/mapbox/satellite-v9'],
 	['Hybrid', 'mapbox://styles/mapbox/satellite-streets-v12'],
 ];
