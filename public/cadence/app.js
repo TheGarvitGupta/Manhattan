@@ -623,7 +623,7 @@ function routeMap(polyline) {
 	const at = (i) => [(W - ((x1 - x0) / span) * k) / 2 + ((xs[i] - x0) / span) * k, (H - ((y1 - y0) / span) * k) / 2 + ((ys[i] - y0) / span) * k];
 	const d = points.map((_, i) => `${i ? 'L' : 'M'}${at(i).map((v) => v.toFixed(1)).join(' ')}`).join('');
 	const [a, b] = [at(0), at(points.length - 1)];
-	return h('div', { class: 'card route' },
+	return h('div', { class: 'route' },
 		svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'The route' },
 			svg('path', { class: 'under', d }),
 			svg('path', { class: 'way', d }),
@@ -639,88 +639,90 @@ function opened(act, fmt) {
 	const note = h('p', { class: 'sub tally', hidden: true }, 'Speed, heart rate and the rest arrive with the next Strava check, within about 10 minutes.');
 	const music = act.songs.reduce((sum, s) => sum + (s.to - s.from), 0);
 	const isRun = RUN_TYPES.includes(act.type);
-	const table = h('div');
-	const sport = sportOf(act.type);
-	const tiles = h('div', { class: 'tiles' });
-	// The figures, with the route beside them where the activity has one.
-	const top = h('div', { class: 'opened-top' }, tiles);
-	// The figures over the card: what Strava says of the whole activity, filled out once its per-second data is in.
-	const fillTiles = (streams) => {
+	const rateWord = isRun ? 'pace' : 'speed';
+	const rate = (v) => (isRun ? fmt.pace(v) : fmt.speed(v));
+	const facts = h('div', { class: 'facts' });
+	const ranked = h('div');
+	const mapSlot = h('div', { class: 'route-slot' });
+
+	// One short line of figures under the name, in place of a row of boxes.
+	const fillFacts = (streams) => {
 		const whole = stretchStats(streams, 0, act.elapsed_s);
-		const rate = sport && whole.speed ? fmt.rate(whole.speed, sport).split(' ') : null;
-		tiles.replaceChildren(...[
-			act.distance_m ? tile('Distance', (act.distance_m / fmt.unitMeters).toFixed(2), fmt.unit) : null,
-			rate ? tile(`Average ${WORDS[sport].rate}`, rate[0], rate[1]) : null,
-			whole.moving ? tile('Moving time', duration(whole.moving)) : tile('Time', duration(act.elapsed_s)),
-			whole.hr ? tile('Average heart rate', Math.round(whole.hr), 'bpm') : tile('Songs', new Set(act.songs.map((x) => `${x.name}|${x.artist}`)).size),
+		const fact = (value, label) => h('span', null, h('b', null, value), label);
+		facts.replaceChildren(...[
+			act.distance_m ? fact(fmt.dist(act.distance_m), 'distance') : null,
+			whole.moving ? fact(duration(whole.moving), 'moving') : fact(duration(act.elapsed_s), 'long'),
+			whole.speed ? fact(rate(whole.speed), `average ${rateWord}`) : null,
+			whole.hr ? fact(`${Math.round(whole.hr)} bpm`, 'average heart rate') : null,
+			fact(act.songs.length ? `${duration(music)}` : 'none', 'of music'),
 		].filter(Boolean));
 	};
 
-	// One row per distinct song: every time it played is added together.
-	const fillTable = (streams) => {
-		if (!act.songs.length) return;
+	// The songs, fastest first. Each has a bar from the middle: right for faster than the activity's average, left for slower.
+	const fillRanked = (streams) => {
+		if (!act.songs.length) return ranked.replaceChildren();
+		// One row per distinct song: every time it played is added together.
 		const bySong = new Map();
 		for (const song of act.songs) {
 			const key = `${song.name}|${song.artist}`;
 			let row = bySong.get(key);
-			if (!row) bySong.set(key, (row = { ...song, plays: 0, seconds: 0, distance: 0, moving: 0, hrSum: 0, hrN: 0 }));
+			if (!row) bySong.set(key, (row = { ...song, plays: 0, seconds: 0, distance: 0, moving: 0 }));
 			const st = stretchStats(streams, song.from - act.start_time, song.to - act.start_time);
 			row.plays++;
 			row.seconds += song.to - song.from;
 			row.distance += st.distance || 0;
 			row.moving += st.moving || 0;
-			row.hrSum += st.hrSum || 0;
-			row.hrN += st.hrN || 0;
 		}
-		const rows = [...bySong.values()].sort((a, b) => b.seconds - a.seconds);
-		const dash = () => h('span', { class: 'dim' }, '–');
-		const speed = (r) => (r.moving >= 5 && r.distance > 0 ? (isRun ? fmt.pace(r.distance / r.moving) : fmt.speed(r.distance / r.moving)) : dash());
-		table.replaceChildren(h('div', { class: 'scroll' }, h('table', { class: 'table' },
-			h('thead', null, h('tr', null,
-				h('th', null, 'Song'),
-				h('th', { class: 'n' }, 'Played for'),
-				streams && h('th', { class: 'n' }, isRun ? 'Average pace' : 'Average speed'),
-				streams && h('th', { class: 'n' }, 'Average heart rate'),
-			)),
-			h('tbody', null, rows.map((r) =>
-				h('tr', null,
-					h('td', null, h('div', { class: 'song' }, art(r.image, r.name, true), h('div', null, h('b', null, r.name), ' ', h('span', null, r.artist), r.plays > 1 ? h('span', { class: 'dim' }, ` · played ${r.plays} times`) : null))),
-					h('td', { class: 'n' }, minSec(r.seconds)),
-					streams && h('td', { class: 'n' }, speed(r)),
-					streams && h('td', { class: 'n' }, r.hrN ? `${Math.round(r.hrSum / r.hrN)} bpm` : dash()),
-				),
-			)),
-		)));
+		const whole = stretchStats(streams, 0, act.elapsed_s).speed;
+		const rows = [...bySong.values()].map((r) => ({ ...r, speed: r.moving >= 5 && r.distance > 0 ? r.distance / r.moving : null }));
+		const paced = whole && rows.some((r) => r.speed);
+		rows.sort((x, y) => (paced ? (y.speed ?? -1) - (x.speed ?? -1) : y.seconds - x.seconds));
+		const widest = Math.max(0.02, ...rows.map((r) => (r.speed ? Math.abs(r.speed / whole - 1) : 0)));
+		ranked.replaceChildren(
+			h('h4', null, paced ? 'Fastest to slowest' : 'What played'),
+			h('p', { class: 'sub' }, paced ? `Each song's ${rateWord} against the average for this ${sportOf(act.type) || 'activity'}, the line down the middle.` : `${plural(rows.length, 'song')}, longest first.`),
+			h('ol', { class: `ranked${paced ? '' : ' plain'}` }, rows.map((r) => {
+				const rel = r.speed ? r.speed / whole - 1 : null;
+				return h('li', null,
+					art(r.image, r.name, 'md'),
+					h('div', { class: 'who' }, h('b', null, r.name), h('span', null, `${r.artist} · ${minSec(r.seconds)}${r.plays > 1 ? ` · ${r.plays} times` : ''}`)),
+					paced && h('div', { class: 'swing', 'aria-hidden': 'true' },
+						rel != null && h('i', { class: rel >= 0 ? 'up' : 'down', style: { width: `${(Math.abs(rel) / widest) * 50}%` } })),
+					paced && h('b', { class: 'num' }, r.speed ? rate(r.speed) : '–'),
+				);
+			})),
+		);
 	};
 
-	const card = h('div', { class: 'card' },
+	const card = h('div', { class: 'card opened' },
 		h('div', { class: 'opened-head' },
 			glyphTile(act.type),
 			h('div', { class: 'grow' },
 				h('h3', null, act.name),
-				h('p', { class: 'sub' }, `${kind(act)} · ${dayName(act.start_time)}, ${clockTime(act.start_time)} – ${clockTime(act.start_time + act.elapsed_s)} · ${duration(act.elapsed_s)}${act.distance_m ? ` · ${fmt.dist(act.distance_m)}` : ''}`),
+				h('p', { class: 'sub' }, `${dayName(act.start_time)}, ${clockTime(act.start_time)} – ${clockTime(act.start_time + act.elapsed_s)}`),
+				facts,
 			),
+			mapSlot,
 		),
 		box,
 		note,
-		act.songs.length ? h('p', { class: 'sub tally' }, `${plural(act.songs.length, 'song')} · music for ${duration(music)} of ${duration(act.elapsed_s)}`) : null,
-		table,
+		ranked,
 	);
 
 	const chart = activityChart(box, act, fmt);
-	fillTable(null);
-	fillTiles(null);
+	fillFacts(null);
+	fillRanked(null);
 	api(`api/activities/${act.id}`)
 		.then(({ streams, polyline }) => {
 			const map = polyline && routeMap(polyline);
-			if (map) top.prepend(map), top.classList.add('mapped');
+			if (map) mapSlot.replaceChildren(map);
 			chart.setStreams(streams);
-			fillTable(streams);
-			fillTiles(streams);
+			fillFacts(streams);
+			fillRanked(streams);
 			note.hidden = !!streams || !act.songs.length || state.me.user.is_demo;
 		})
 		.catch(() => {});
-	return h('div', { class: 'opened' }, top, card);
+	return card;
 }
 
 // Long lists are laid out a screenful at a time, more as the list is scrolled.

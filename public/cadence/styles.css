@@ -436,7 +436,7 @@ a.fact:hover .who b { text-decoration: underline; }
 .chart .songbar { fill: var(--spotify); fill-opacity: 0.24; }
 .chart .change { stroke: var(--axis); stroke-width: 1; }
 .chart line.mean { stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0.75; }
-.chart text.mean { fill: var(--ink); font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.chart text.mean { fill: var(--ink-2); font-weight: 500; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
 .chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart text.on { fill: var(--ink); font-weight: 600; font-size: 13px; }
 .tip .song.t { color: var(--muted); }
@@ -453,17 +453,53 @@ a.fact:hover .who b { text-decoration: underline; }
 }
 .table td.dim { white-space: nowrap; }
 
-/* An opened activity: its figures, and the outline of its route beside them where it has one. */
-.opened-top { margin-bottom: 12px; }
-.opened-top.mapped { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 12px; }
-.opened-top.mapped .tiles { grid-template-columns: 1fr 1fr; }
-.route { padding: 0; overflow: hidden; display: grid; background: color-mix(in srgb, var(--accent) 6%, var(--surface)); background-image: linear-gradient(var(--wash) 1px, transparent 1px), linear-gradient(90deg, var(--wash) 1px, transparent 1px); background-size: 24px 24px; }
-.route svg { width: 100%; height: 100%; min-height: 170px; }
+/* An opened activity: its name and a line of figures, the outline of its route, the chart, and its songs fastest first. */
+.opened { padding: 24px; }
+.opened .opened-head { align-items: center; gap: 14px; margin-bottom: 18px; }
+.opened .opened-head h3 { font-size: 20px; }
+.opened .opened-head .sub { margin: 1px 0 10px; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--ink-2); font-size: 13px; }
+.facts b { color: var(--ink); font-size: 17px; font-weight: 650; letter-spacing: -0.01em; margin-right: 5px; font-variant-numeric: tabular-nums; }
+.route-slot:empty { display: none; }
+.route { width: 150px; height: 100px; flex: none; border-radius: 12px; overflow: hidden; background: color-mix(in srgb, var(--strava) 7%, var(--surface)); }
+.route svg { display: block; width: 100%; height: 100%; }
 .route path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.route .under { stroke: var(--surface); stroke-width: 7; }
-.route .way { stroke: var(--strava); stroke-width: 3; }
-.route .start { fill: var(--strava); stroke: var(--surface); stroke-width: 2; }
-.route .end { fill: var(--surface); stroke: var(--strava); stroke-width: 2.5; }
+.route .under { stroke: var(--surface); stroke-width: 9; }
+.route .way { stroke: var(--strava); stroke-width: 4; }
+.route .start { fill: var(--strava); stroke: var(--surface); stroke-width: 2.5; r: 6px; }
+.route .end { fill: var(--surface); stroke: var(--strava); stroke-width: 3; r: 6px; }
+.chart .lane { fill: var(--wash); }
+.chart .series.faint { stroke-width: 1.5; opacity: 0.45; }
+.chart .ring { fill: var(--surface); stroke-width: 2.5; }
+.chart .ring.up { stroke: var(--faster); }
+.chart .ring.down { stroke: var(--axis); }
+.chart .step { stroke-width: 4; stroke-linecap: round; }
+.chart .step.up, .ranked .swing .up { stroke: var(--faster); background: var(--faster); }
+.chart .step.down, .ranked .swing .down { stroke: var(--axis); background: var(--axis); }
+.chart text.stepv { font-weight: 700; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.chart text.stepv.up { fill: var(--faster); }
+.chart text.stepv.down { fill: var(--ink-2); }
+.opened h4 { margin: 26px 0 0; font-size: 16px; letter-spacing: -0.01em; }
+.opened h4 + .sub { color: var(--ink-2); font-size: 13px; margin: 2px 0 10px !important; }
+.ranked { list-style: none; margin: 0; padding: 0; }
+.ranked li { display: grid; grid-template-columns: 40px minmax(0, 1.1fr) minmax(70px, 1fr) 84px; align-items: center; gap: 14px; padding: 9px 0; border-top: 1px solid var(--grid); }
+.ranked.plain li { grid-template-columns: 40px minmax(0, 1fr); }
+.ranked .who { min-width: 0; }
+.ranked .who b, .ranked .who span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ranked .who b { font-weight: 600; font-size: 15px; }
+.ranked .who span { color: var(--ink-2); font-size: 13px; }
+/* The bar starts at the middle, which is the average. */
+.ranked .swing { position: relative; height: 12px; border-radius: 6px; background: linear-gradient(var(--axis), var(--axis)) center / 1.5px 100% no-repeat, var(--wash); }
+.ranked .swing i { position: absolute; top: 0; height: 100%; }
+.ranked .swing .up { left: 50%; border-radius: 0 6px 6px 0; }
+.ranked .swing .down { right: 50%; border-radius: 6px 0 0 6px; }
+.ranked .num { text-align: right; white-space: nowrap; font-weight: 650; font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) {
-	.opened-top.mapped { grid-template-columns: 1fr; }
+	.opened { padding: 18px 16px; }
+	.opened .opened-head { flex-wrap: wrap; }
+	.opened .opened-head .glyph-tile { display: none; }
+	.route { width: 100%; height: 120px; order: 3; }
+	.route-slot { flex-basis: 100%; }
+	.ranked li { grid-template-columns: 40px minmax(0, 1fr) 76px; gap: 4px 12px; }
+	.ranked .swing { grid-column: 2 / -1; grid-row: 2; height: 8px; }
 }

@@ -394,12 +394,19 @@ export function activityChart(container, act, fmt) {
 		const total = Math.max(1, act.elapsed_s, streams ? streams.t[streams.t.length - 1] : 0);
 		const x = (sec) => L + (sec / total) * (width - L - R);
 		const panels = measures(streams, isRun, fmt);
-		const laneH = 32;
+		const laneH = 36;
 		const actY = 22;
-		const songY = actY + laneH + 6;
-		const panelH = width < 520 ? 72 : 88;
-		const panelGap = 42;
-		const bottom = songY + laneH + panels.length * (panelGap + panelH);
+		const songY = actY;
+		// The first panel is the point of the page: pace (or speed) with each song's average laid over it. The rest are slim.
+		const lead = panels.length && panels[0].average != null ? panels[0] : null;
+		const panelGap = 34;
+		// With a lead panel the covers ride on it, so the lane of song blocks is only drawn when there is none.
+		let bottom = lead ? actY : songY + laneH;
+		for (const m of panels) {
+			m.h = m === lead ? (width < 520 ? 170 : 230) : 44;
+			m.top = bottom + (m === lead ? 40 : panelGap);
+			bottom = m.top + m.h;
+		}
 		const height = bottom + 6;
 		const svg = s('svg', { viewBox: `0 0 ${width} ${height}`, height, role: 'img', 'aria-label': `${act.name}: the songs that played, with speed, heart rate and other data underneath` });
 
@@ -409,56 +416,80 @@ export function activityChart(container, act, fmt) {
 			if (sec > 0 && x(sec) > width - R - 30) break;
 			svg.append(s('text', { x: x(sec), y: 12, 'text-anchor': sec === 0 ? 'start' : 'middle' }, clockTime(act.start_time + sec)));
 		}
-		if (L >= 64) svg.append(s('text', { x: 0, y: actY + 20 }, 'Strava'), s('text', { x: 0, y: songY + 20 }, 'Spotify'));
 
-		// The activity, then its songs: a 2px gap of surface separates neighbours.
+		// The songs as a row of blocks, a 2px gap of surface between neighbours.
 		const W = width - L - R;
-		svg.append(s('rect', { class: 'actbar', x: L, y: actY, width: W, height: laneH, rx: 6 }), s('rect', { class: 'actedge', x: L, y: actY, width: 3, height: laneH }));
-		if (W >= 30 + act.name.length * 7.2) svg.append(s('text', { class: 'on', x: L + 12, y: actY + 21 }, act.name));
-		if (!songs.length) svg.append(s('text', { x: L, y: songY + 20 }, 'No songs were captured during this activity.'));
-		for (const song of songs) {
+		if (!lead) svg.append(s('rect', { class: 'lane', x: L, y: songY, width: W, height: laneH, rx: 8 }));
+		if (!lead && !songs.length) svg.append(s('text', { x: L + 12, y: songY + 23 }, 'No songs were captured during this activity.'));
+		for (const song of lead ? [] : songs) {
 			const x0 = x(song.a);
 			const w = Math.max(3, x(song.b) - x0 - 2);
-			svg.append(s('rect', { class: 'songbar', x: x0, y: songY, width: w, height: laneH, rx: Math.min(6, w / 2) }));
+			svg.append(s('rect', { class: 'songbar', x: x0, y: songY, width: w, height: laneH, rx: Math.min(8, w / 2) }));
 			const hasArt = !!song.image && w >= 30;
 			if (hasArt) {
-				const img = s('image', { href: song.image, x: x0 + 5, y: songY + 5, width: 22, height: 22, preserveAspectRatio: 'xMidYMid slice' });
+				const img = s('image', { href: song.image, x: x0 + 5, y: songY + 5, width: 26, height: 26, preserveAspectRatio: 'xMidYMid slice' });
 				img.style.clipPath = 'inset(0 round 4px)';
 				svg.append(img);
 			}
 			// Only name a song when the name fits its block.
-			const textX = x0 + (hasArt ? 33 : 8);
-			if (w >= textX - x0 + 6 + song.name.length * 7) svg.append(s('text', { class: 'on', x: textX, y: songY + 21 }, song.name));
+			const textX = x0 + (hasArt ? 38 : 8);
+			if (w >= textX - x0 + 6 + song.name.length * 7) svg.append(s('text', { class: 'on', x: textX, y: songY + 23 }, song.name));
 		}
 
 		// A line down through every panel wherever the song changes.
-		if (panels.length) {
+		// (Left out when the songs are too many for the width: the lines would crowd out the data.)
+		if (panels.length && W / Math.max(1, songs.length) >= 26) {
 			const changes = new Set();
 			songs.forEach((song, i) => {
 				if (song.a > 2) changes.add(Math.round(song.a));
 				if (song.b < total - 2 && (i === songs.length - 1 || songs[i + 1].a - song.b > 5)) changes.add(Math.round(song.b));
 			});
-			for (const sec of changes) svg.append(s('line', { class: 'change', x1: x(sec), x2: x(sec), y1: songY + laneH, y2: bottom }));
+			for (const sec of changes) svg.append(s('line', { class: 'change', x1: x(sec), x2: x(sec), y1: lead ? lead.top : songY + laneH, y2: bottom }));
 		}
 
 		// One panel per measure, each with its own scale (never two scales on one plot).
 		const xs = streams ? streams.t.map(x) : [];
 		panels.forEach((m, i) => {
-			m.top = songY + laneH + panelGap + i * (panelGap + panelH);
 			m.y = (v) => {
 				const f = (Math.min(m.hi, Math.max(m.lo, v)) - m.lo) / (m.hi - m.lo || 1);
-				return m.top + (m.invert ? f : 1 - f) * panelH;
+				return m.top + (m.invert ? f : 1 - f) * m.h;
 			};
-			svg.append(s('text', { class: 'strong', x: L, y: m.top - 14 }, m.title));
-			for (const v of m.ticks) svg.append(s('line', { class: 'grid', x1: L, x2: width - R, y1: m.y(v), y2: m.y(v) }), s('text', { x: L - 8, y: m.y(v) + 4, 'text-anchor': 'end' }, m.tick(v)));
+			svg.append(s('text', { class: m === lead ? 'strong' : '', x: L, y: m.top - 10 }, m.title));
+			// A slim panel shows only the ends of its scale.
+			for (const v of m === lead ? m.ticks : [m.ticks[0], m.ticks[m.ticks.length - 1]]) svg.append(s('line', { class: 'grid', x1: L, x2: width - R, y1: m.y(v), y2: m.y(v) }), s('text', { x: L - 8, y: m.y(v) + 4, 'text-anchor': 'end' }, m.tick(v)));
 			const line = s('path', { class: 'series', d: path(xs, m.values.map((v) => (v == null ? null : m.y(v)))) });
 			line.style.stroke = m.color;
+			if (m === lead && songs.length) line.classList.add('faint');
 			svg.append(line);
+			if (m === lead) {
+				// Each song's own average, as a bold step over its stretch with its cover riding on it: higher is faster.
+				for (const song of songs) {
+					const avg = stretchStats(streams, song.a, song.b).speed;
+					if (!avg) continue;
+					const v = m.invert ? fmt.unitMeters / avg : (avg * 3600) / fmt.unitMeters;
+					const faster = m.invert ? v < m.average : v > m.average;
+					const [x0, x1, y] = [x(song.a) + 1, x(song.b) - 3, m.y(v)];
+					if (x1 - x0 < 3) continue;
+					svg.append(s('line', { class: `step ${faster ? 'up' : 'down'}`, x1: x0, x2: x1, y1: y, y2: y }));
+					const size = Math.min(34, x1 - x0 - 2);
+					const mid = (x0 + x1) / 2;
+					if (song.image && size >= 14) {
+						const img = s('image', { href: song.image, x: mid - size / 2, y: y - size / 2, width: size, height: size, preserveAspectRatio: 'xMidYMid slice' });
+						img.style.clipPath = `inset(0 round ${Math.round(size / 4)}px)`;
+						svg.append(s('rect', { class: `ring ${faster ? 'up' : 'down'}`, x: mid - size / 2 - 2.5, y: y - size / 2 - 2.5, width: size + 5, height: size + 5, rx: Math.round(size / 4) + 2.5 }), img);
+					}
+					const half = song.image && size >= 14 ? size / 2 + 4 : 5;
+					if (x1 - x0 >= 40) svg.append(s('text', { class: `stepv ${faster ? 'up' : 'down'}`, x: mid, y: faster ? y - half - 4 : y + half + 14, 'text-anchor': 'middle' }, m.tip(v)[0]));
+				}
+			}
 			if (m.average != null && m.average >= m.lo && m.average <= m.hi) {
 				const y = m.y(m.average);
 				const mean = s('line', { class: 'mean', x1: L, x2: width - R, y1: y, y2: y });
 				mean.style.stroke = m.color;
-				svg.append(mean, s('text', { class: 'mean', x: width - R - 4, y: y - 6, 'text-anchor': 'end' }, `${m.averageLabel} ${m.tip(m.average).join(' ')}`));
+				svg.append(mean, s('text', { class: 'mean', x: width - R, y: m.top - 10, 'text-anchor': 'end' }, `${m.averageLabel} ${m.tip(m.average).join(' ')}`));
+				const key = s('line', { class: 'mean', x1: width - R - 12 - (m.averageLabel.length + m.tip(m.average).join(' ').length + 1) * 6.6 - 22, x2: width - R - 8 - (m.averageLabel.length + m.tip(m.average).join(' ').length + 1) * 6.6, y1: m.top - 14, y2: m.top - 14 });
+				key.style.stroke = m.color;
+				svg.append(key);
 			}
 		});
 
