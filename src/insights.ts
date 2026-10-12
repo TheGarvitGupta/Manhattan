@@ -1,9 +1,11 @@
-// Turns runs + songs into what the dashboard shows.
+// Turns runs (or rides) + songs into what the dashboard shows. One sport at a time:
+// a ride's speeds have nothing to say about a run's, so each gets its own analysis.
 //
 // Comparisons ("rel") measure a song against the pace of the run it was heard
 // on, so a song that only comes up on easy days isn't unfairly "slow". The
 // plain lists (fastest, most played, ...) use straightforward averages.
 
+import { Sport } from './providers';
 import { Env, now, recast, User } from './util';
 
 const MIN_SEGMENT_S = 30;
@@ -102,13 +104,13 @@ function eligible(songs: Song[], strict: (s: Song) => boolean, loose: (s: Song) 
   return first.length >= 4 ? first : songs.filter(loose);
 }
 
-export async function buildInsights(env: Env, user: User) {
+export async function buildInsights(env: Env, user: User, sport: Sport = 'run') {
   const runs = (
     await env.DB.prepare(
       `SELECT id, start_time, distance_m, moving_s, avg_hr, best_km_s, best_km_at, best_mi_s, best_mi_at FROM runs
-       WHERE user_id = ? AND stream_state = 'ok' AND moving_s > 0 ORDER BY start_time`,
+       WHERE user_id = ? AND sport = ? AND stream_state = 'ok' AND moving_s > 0 ORDER BY start_time`,
     )
-      .bind(user.id)
+      .bind(user.id, sport)
       .all<RunRow>()
   ).results;
 
@@ -120,9 +122,9 @@ export async function buildInsights(env: Env, user: User) {
         `SELECT rs.run_id, rs.idx, rs.track_id, rs.start_s, rs.end_s, rs.distance_m, rs.moving_s, rs.avg_hr, rs.skipped,
                 t.name, t.artist, t.image
          FROM run_songs rs JOIN runs r ON r.id = rs.run_id JOIN tracks t ON t.id = rs.track_id
-         WHERE r.user_id = ? ORDER BY r.start_time, rs.idx`,
+         WHERE r.user_id = ? AND r.sport = ? ORDER BY r.start_time, rs.idx`,
       )
-        .bind(user.id)
+        .bind(user.id, sport)
         .all<SongRow>()
     ).results,
   );
@@ -298,6 +300,7 @@ export async function buildInsights(env: Env, user: User) {
   const hrTotal = withRate.reduce((a, r) => a + r.avg_hr! * r.moving_s, 0);
 
   return {
+    sport,
     totals: {
       runs: runs.length,
       runs_with_music: withMusic.length,

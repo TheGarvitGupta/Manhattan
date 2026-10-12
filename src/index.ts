@@ -4,7 +4,7 @@
 import { accessRequestEmail, buildEmail, canSend, EmailUser, FROM, hasPatterns, Kind, send, sendWeekly, Variant } from './emails';
 import { buildInsights } from './insights';
 import { SongInterval, songIntervals } from './match';
-import { accessToken, authorizeUrl, exchangeSpotifyCode, exchangeStravaCode, Provider, saveTokens, stravaDeauthorize } from './providers';
+import { accessToken, authorizeUrl, exchangeSpotifyCode, exchangeStravaCode, Provider, saveTokens, Sport, stravaDeauthorize } from './providers';
 import { syncAll, syncUser } from './sync';
 import { Env, getCookie, json, now, randomToken, recast, redirect, setCookie, sha256Hex, User } from './util';
 
@@ -98,10 +98,12 @@ async function me(env: Env, user: User) {
     .bind(user.id)
     .all<{ provider: Provider; status: string; last_sync_at: number | null; last_error: string | null }>();
   const counts = await env.DB.prepare(
-    `SELECT (SELECT COUNT(*) FROM runs WHERE user_id = ?1) AS runs, (SELECT COUNT(*) FROM plays WHERE user_id = ?1) AS plays`,
+    `SELECT (SELECT COUNT(*) FROM runs WHERE user_id = ?1 AND sport = 'run') AS runs,
+            (SELECT COUNT(*) FROM runs WHERE user_id = ?1 AND sport = 'ride') AS rides,
+            (SELECT COUNT(*) FROM plays WHERE user_id = ?1) AS plays`,
   )
     .bind(user.id)
-    .first<{ runs: number; plays: number }>();
+    .first<{ runs: number; rides: number; plays: number }>();
   // The earliest thing held for this person: their first song or first run.
   const since = await env.DB.prepare(
     `SELECT MIN(t) AS t FROM (SELECT MIN(played_at) AS t FROM plays WHERE user_id = ?1
@@ -130,20 +132,20 @@ async function me(env: Env, user: User) {
   };
 }
 
-async function listRuns(env: Env, user: User) {
+async function listRuns(env: Env, user: User, sport: Sport) {
   const runs = await env.DB.prepare(
     `SELECT r.id, r.name, r.start_time, r.distance_m, r.moving_s, r.avg_hr,
             (SELECT COUNT(*) FROM run_songs WHERE run_id = r.id) AS songs
-     FROM runs r WHERE r.user_id = ? AND r.stream_state = 'ok' ORDER BY r.start_time DESC LIMIT 200`,
+     FROM runs r WHERE r.user_id = ? AND r.sport = ? AND r.stream_state = 'ok' ORDER BY r.start_time DESC LIMIT 200`,
   )
-    .bind(user.id)
+    .bind(user.id, sport)
     .all();
   return { runs: runs.results };
 }
 
 async function getRun(env: Env, user: User, id: number) {
   const run = await env.DB.prepare(
-    `SELECT id, name, start_time, distance_m, moving_s, elapsed_s, avg_hr, streams FROM runs
+    `SELECT id, sport, name, start_time, distance_m, moving_s, elapsed_s, avg_hr, streams FROM runs
      WHERE id = ? AND user_id = ? AND stream_state = 'ok'`,
   )
     .bind(id, user.id)
@@ -339,8 +341,10 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   }
 
   if (path === '/api/me') return json(await me(env, user));
-  if (path === '/api/insights') return json(await buildInsights(env, user));
-  if (path === '/api/runs') return json(await listRuns(env, user));
+  // Running and biking are analysed apart; ?sport=ride asks for the rides.
+  const sport: Sport = url.searchParams.get('sport') === 'ride' ? 'ride' : 'run';
+  if (path === '/api/insights') return json(await buildInsights(env, user, sport));
+  if (path === '/api/runs') return json(await listRuns(env, user, sport));
   if (path === '/api/recent') return json(await recent(env, user));
 
   // Previews of the emails, built from this account's own data.

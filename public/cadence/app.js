@@ -3,7 +3,8 @@ import { activityChart, h, hideTip, minSec, runChart, s as svg, spectrum, stretc
 import { scene } from './scene.js';
 
 const app = document.getElementById('app');
-const state = { me: null, insights: null, runs: null, recent: null, units: 'km', allRuns: false, openActivity: null, emailScenario: 'patterns' };
+// Running and biking are analysed apart: `insights` and `runs` each hold one of each ({ run, ride }), and `sport` is the tab that is open.
+const state = { me: null, insights: null, runs: null, recent: null, sport: 'run', sportChosen: false, units: 'km', allRuns: false, openActivity: null, emailScenario: 'patterns' };
 
 // Units: what the person picks here, else their Strava setting when Strava
 // shares it, else whatever the rest of garvitgupta.com is showing them: its
@@ -26,21 +27,39 @@ try {
 	}
 } catch {}
 
+// --- the two sports -----------------------------------------------------------
+
+// How each is spoken of. A run is told by its pace (5:19 /km), a ride by its speed (28.4 km/h).
+const SPORTS = ['run', 'ride'];
+const WORDS = {
+	run: { tab: 'Running', one: 'run', many: 'runs', Many: 'Runs', verb: 'run', did: 'ran', rate: 'pace', Rate: 'Pace' },
+	ride: { tab: 'Biking', one: 'ride', many: 'rides', Many: 'Rides', verb: 'ride', did: 'rode', rate: 'speed', Rate: 'Speed' },
+};
+const RUN_TYPES = ['Run', 'TrailRun', 'VirtualRun'];
+const RIDE_TYPES = ['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide'];
+const sportOf = (type) => (RUN_TYPES.includes(type) ? 'run' : RIDE_TYPES.includes(type) ? 'ride' : null);
+
 // --- formatting ---------------------------------------------------------------
 
 function formatter() {
 	const unit = state.units;
 	const unitMeters = unit === 'mi' ? 1609.344 : 1000;
+	const per = unit === 'mi' ? 'mph' : 'km/h';
 	return {
 		unit,
 		unitMeters,
+		per,
+		// How fast, said the sport's way: pace for a run, speed for a ride.
+		rate(speed, sport) {
+			return sport === 'ride' ? this.speed(speed) : this.pace(speed);
+		},
 		pace(speed) {
 			if (!speed) return '–';
 			const sec = Math.round(unitMeters / speed);
 			return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} /${unit}`;
 		},
 		dist: (m) => `${(m / unitMeters).toFixed(m / unitMeters >= 100 ? 0 : 1)} ${unit}`,
-		speed: (v) => `${((v * 3600) / unitMeters).toFixed(1)} ${unit}/h`,
+		speed: (v) => (v ? `${((v * 3600) / unitMeters).toFixed(1)} ${per}` : '–'),
 	};
 }
 
@@ -87,7 +106,19 @@ async function load() {
 		return render();
 	}
 	try {
-		[state.insights, state.runs, state.recent] = await Promise.all([api('api/insights'), api('api/runs').then((r) => r.runs), api('api/recent')]);
+		// Both analyses are always made; the tabs only choose which is on screen.
+		const [run, ride, runs, rides, recent] = await Promise.all([
+			api('api/insights'),
+			api('api/insights?sport=ride'),
+			api('api/runs').then((r) => r.runs),
+			api('api/runs?sport=ride').then((r) => r.runs),
+			api('api/recent'),
+		]);
+		state.insights = { run, ride };
+		state.runs = { run: runs, ride: rides };
+		state.recent = recent;
+		// Until a tab is picked, open on the sport there is more of.
+		if (!state.sportChosen) state.sport = ride.totals.runs_with_music > run.totals.runs_with_music || (!runs.length && rides.length) ? 'ride' : 'run';
 	} catch (err) {
 		return fail(err);
 	}
@@ -154,7 +185,7 @@ function header() {
 	);
 }
 
-const footer = () => h('p', { class: 'foot' }, 'Powered by Strava. Music data from Spotify. These are patterns in your own runs, not proof that a song changes your pace. The first two minutes of each run are left out as warm-up.');
+const footer = () => h('p', { class: 'foot' }, 'Powered by Strava. Music data from Spotify. These are patterns in your own runs and rides, not proof that a song changes how fast you go. The first two minutes of each one are left out as warm-up.');
 
 // --- signed out ---------------------------------------------------------------
 
@@ -246,16 +277,16 @@ function notices() {
 	if (emailNote) out.push(emailNote);
 	if (me.user.is_demo) {
 		out.push(h('div', { class: 'card note' },
-			h('p', null, h('strong', null, 'This is simulated data.'), 'A made-up runner with six months of runs and songs, so you can see what Cadence finds.'),
-			h('button', { class: 'btn', onclick: () => act(() => api('auth/logout', 'POST')) }, 'Use my own runs'),
+			h('p', null, h('strong', null, 'This is simulated data.'), 'A made-up athlete with six months of runs, rides and songs, so you can see what Cadence finds.'),
+			h('button', { class: 'btn', onclick: () => act(() => api('auth/logout', 'POST')) }, 'Use my own data'),
 		));
 		return out;
 	}
 	if (!me.strava.ok) {
-		out.push(h('div', { class: 'card note error' }, h('p', null, h('strong', null, 'Strava needs reconnecting.'), 'Cadence lost access to your runs.'), h('a', { class: 'btn strava', href: 'auth/strava' }, 'Reconnect Strava')));
+		out.push(h('div', { class: 'card note error' }, h('p', null, h('strong', null, 'Strava needs reconnecting.'), 'Cadence lost access to your activities.'), h('a', { class: 'btn strava', href: 'auth/strava' }, 'Reconnect Strava')));
 	}
 	if (!me.spotify.connected) {
-		out.push(h('div', { class: 'card note' }, h('p', null, h('strong', null, 'One more step: connect Spotify.'), 'Cadence can only match songs it sees from now on, so connect before your next run.'), h('a', { class: 'btn spotify', href: 'auth/spotify' }, 'Connect Spotify'), askForAccess()));
+		out.push(h('div', { class: 'card note' }, h('p', null, h('strong', null, 'One more step: connect Spotify.'), 'Cadence can only match songs it sees from now on, so connect before your next run or ride.'), h('a', { class: 'btn spotify', href: 'auth/spotify' }, 'Connect Spotify'), askForAccess()));
 	} else if (me.spotify.not_allowed) {
 		out.push(h('div', { class: 'card note error' }, h('p', null, h('strong', null, 'Your Spotify account isn’t on the guest list yet.'), 'Spotify only lets Cadence connect a handful of people, each added by hand. Ask below, then reconnect once you’ve been added.'), h('a', { class: 'btn spotify', href: 'auth/spotify' }, 'Reconnect Spotify'), askForAccess()));
 	} else if (!me.spotify.ok) {
@@ -322,23 +353,28 @@ function statusBar() {
 
 // --- dashboard pieces -------------------------------------------------------------------------
 
-/** "28s faster": a song's pace against the person's overall average, per km or mile. */
-function paceGap(speed, average, fmt) {
+/** "28s faster", or for a ride "1.4 km/h faster": how fast a song went against the person's overall average. */
+function paceGap(speed, average, fmt, sport) {
+	if (sport === 'ride') {
+		const d = ((speed - average) * 3600) / fmt.unitMeters;
+		return Math.abs(d) < 0.05 ? 'your usual speed' : `${Math.abs(d).toFixed(1)} ${fmt.per} ${d > 0 ? 'faster' : 'slower'}`;
+	}
 	const sec = Math.round(fmt.unitMeters / average - fmt.unitMeters / speed);
 	return sec === 0 ? 'your usual pace' : `${Math.abs(sec)}s ${sec > 0 ? 'faster' : 'slower'}`;
 }
 
-/** A pace with its unit always attached, the unit set smaller: 9:03 /mi. */
-function paceValue(speed, fmt) {
-	const [time, unit] = fmt.pace(speed).split(' ');
-	return [time, h('small', null, ` ${unit}`)];
+/** A pace or speed with its unit always attached, the unit set smaller: 9:03 /mi, 17.6 mph. */
+function paceValue(speed, fmt, sport) {
+	const [value, unit] = fmt.rate(speed, sport).split(' ');
+	return [value, h('small', null, ` ${unit}`)];
 }
 
 /** The same, led by an arrow: coloured and up when faster, grey and down when slower. */
-function paceArrow(speed, average, fmt) {
-	const sec = Math.round(fmt.unitMeters / average - fmt.unitMeters / speed);
-	if (sec === 0) return paceGap(speed, average, fmt);
-	return [h('i', { class: `arrow ${sec > 0 ? 'up' : 'down'}`, 'aria-hidden': 'true' }, sec > 0 ? '▲' : '▼'), paceGap(speed, average, fmt)];
+function paceArrow(speed, average, fmt, sport) {
+	const text = paceGap(speed, average, fmt, sport);
+	if (text.startsWith('your usual')) return text;
+	const up = speed > average;
+	return [h('i', { class: `arrow ${up ? 'up' : 'down'}`, 'aria-hidden': 'true' }, up ? '▲' : '▼'), text];
 }
 
 /** A span that covers every value with a little room either side. */
@@ -380,8 +416,13 @@ function section(title, sub, ...kids) {
 }
 
 /** The whole "enough data" dashboard, top to bottom. */
-function story(ins, fmt) {
-	const { runs } = state;
+function story(ins, fmt, sport) {
+	const runs = state.runs[sport];
+	const w = WORDS[sport];
+	const rate = (v) => fmt.rate(v, sport);
+	const gap = (v) => paceGap(v, average, fmt, sport);
+	const value = (r) => paceValue(r.speed, fmt, sport);
+	const arrow = (r) => paceArrow(r.speed, average, fmt, sport);
 	const t = ins.totals;
 	const average = t.distance_m / t.moving_s;
 	const out = [];
@@ -392,10 +433,10 @@ function story(ins, fmt) {
 		out.push(h('div', { class: 'card headline' },
 			art(top.image, top.name, 'lg'),
 			h('div', { class: 'headline-text' },
-				h('div', { class: 'kicker' }, 'You run fastest to'),
+				h('div', { class: 'kicker' }, `You ${w.verb} fastest to`),
 				h('h1', null, top.name),
 				h('p', { class: 'by' }, top.artist),
-				h('p', { class: 'proof' }, h('b', null, fmt.pace(top.speed)), ` ${paceGap(top.speed, average, fmt)} than your average`),
+				h('p', { class: 'proof' }, h('b', null, rate(top.speed)), gap(top.speed).startsWith('your usual') ? ` ${gap(top.speed)}` : ` ${gap(top.speed)} than your average`),
 			),
 		));
 	}
@@ -406,16 +447,16 @@ function story(ins, fmt) {
 		spectrum(box, paced.map((r) => ({ ...r, value: r.speed })), {
 			range: span([...paced.map((r) => r.speed), average]),
 			avg: average,
-			avgLabel: `your average ${fmt.pace(average)}`,
+			avgLabel: `your average ${rate(average)}`,
 			left: 'slower',
 			right: 'faster',
-			describe: (r) => `${fmt.pace(r.speed)} · ${paceGap(r.speed, average, fmt)}`,
+			describe: (r) => `${rate(r.speed)} · ${gap(r.speed)}`,
 		});
-		out.push(section('Fastest and slowest songs', 'Each cover sits at the pace you ran while it played.',
+		out.push(section('Fastest and slowest songs', `Each cover sits at the ${w.rate} you ${w.did} while it played.`,
 			h('div', { class: 'card' }, box),
 			h('div', { class: 'pair' },
-				songList('Fastest', 'You run quickest to these.', ins.fastest, (r) => paceValue(r.speed, fmt), (r) => paceArrow(r.speed, average, fmt)),
-				songList('Slowest', 'You run slowest to these.', ins.slowest, (r) => paceValue(r.speed, fmt), (r) => paceArrow(r.speed, average, fmt)),
+				songList('Fastest', `You ${w.verb} quickest to these.`, ins.fastest, value, arrow),
+				songList('Slowest', `You ${w.verb} slowest to these.`, ins.slowest, value, arrow),
 			),
 		));
 	}
@@ -425,13 +466,13 @@ function story(ins, fmt) {
 	// The fastest single kilometre, or mile for people who think in miles.
 	const miles = fmt.unit === 'mi';
 	const km = miles ? ins.best_mile : ins.best_km;
-	out.push(section('On repeat', 'What you play most while you run.',
+	out.push(section('On repeat', `What you play most while you ${w.verb}.`,
 		h('div', { class: 'pair' },
-			songList('Most played', 'How many times each came up on a run.', ins.most_played, (r) => `${r.plays}×`, (r) => `on ${plural(r.runs, 'run')}`, (r) => bar(r.plays / mostPlays, 'var(--pace)')),
-			songList('New this month', 'First heard on a run in the last 30 days.', ins.new_this_month, (r) => paceValue(r.speed, fmt), (r) => paceArrow(r.speed, average, fmt)),
+			songList('Most played', `How many times each came up on a ${w.one}.`, ins.most_played, (r) => `${r.plays}×`, (r) => `on ${plural(r.runs, w.one)}`, (r) => bar(r.plays / mostPlays, 'var(--pace)')),
+			songList('New this month', `First heard on a ${w.one} in the last 30 days.`, ins.new_this_month, value, arrow),
 		),
 		h('div', { class: 'pair' },
-			ins.opener ? fact('Your opener', 'The song you start runs with most.', ins.opener.image, ins.opener.name, ins.opener.name, `${ins.opener.artist} · started ${plural(ins.opener.count, 'run')}`) : null,
+			ins.opener ? fact('Your opener', `The song you start ${w.many} with most.`, ins.opener.image, ins.opener.name, ins.opener.name, `${ins.opener.artist} · started ${plural(ins.opener.count, w.one)}`) : null,
 			km ? fact(miles ? 'Fastest mile' : 'Fastest kilometre', `Your quickest single ${miles ? 'mile' : 'km'}, and what was on.`, km.song && km.song.image, km.song ? km.song.name : '♪', minSec(km.seconds), `${km.song ? `${km.song.name} · ` : ''}${day(km.start_time)}`, `#/run/${km.run_id}`) : null,
 		),
 	));
@@ -474,7 +515,7 @@ function story(ins, fmt) {
 	const quickest = Math.max(0, ...parts.map((p) => p.speed));
 	const split = (r) => h('i', { class: 'meter split' }, h('i', { style: { width: `${r.rate * 100}%` } }));
 	const skipText = (r) => `${r.skipped} of ${r.plays}`;
-	out.push(section('Habits', 'How you listen while you run.',
+	out.push(section('Habits', `How you listen while you ${w.verb}.`,
 		h('div', { class: 'pair' },
 			songList('Most skipped', 'You cut these short most often.', ins.skips.most.slice(0, 3), skipText, () => 'plays skipped', split),
 			songList('Least skipped', 'You nearly always let these finish.', ins.skips.least.slice(0, 3), skipText, () => 'plays skipped', split),
@@ -483,16 +524,16 @@ function story(ins, fmt) {
 			parts.length >= 2
 				? h('div', { class: 'card list' },
 					h('h3', null, 'Time of day'),
-					h('p', { class: 'what' }, 'Your average pace by when you run.'),
+					h('p', { class: 'what' }, `Your average ${w.rate} by when you ${w.verb}.`),
 					h('div', { class: 'day-parts' }, parts.map((p) =>
 						h('div', { class: p.speed === quickest ? 'best' : null },
 							h('span', null, p.name),
-							h('b', null, paceValue(p.speed, fmt)),
-							h('span', null, p.speed === quickest ? `fastest · ${plural(p.n, 'run')}` : plural(p.n, 'run')),
+							h('b', null, paceValue(p.speed, fmt, sport)),
+							h('span', null, p.speed === quickest ? `fastest · ${plural(p.n, w.one)}` : plural(p.n, w.one)),
 						))),
 				)
 				: null,
-			// Each song's slice of everything run since the data began: 4 km of 199 km is 2.0%.
+			// Each song's slice of everything covered since the data began: 4 km of 199 km is 2.0%.
 			songList('Share of your distance', `How much of your ${fmt.dist(t.distance_m)} each song played for.`, ins.furthest.slice(0, 3),
 				(r) => `${((r.distance_m / t.distance_m) * 100).toFixed(1)}%`, (r) => fmt.dist(r.distance_m)),
 		),
@@ -502,25 +543,25 @@ function story(ins, fmt) {
 
 const RUNS_SHOWN = 10;
 
-function runsTable(all, fmt) {
+function runsTable(all, fmt, sport) {
+	const w = WORDS[sport];
 	const runs = state.allRuns ? all : all.slice(0, RUNS_SHOWN);
 	return h('div', { class: 'card' }, h('div', { class: 'scroll' },
 		h('table', { class: 'table' },
-			h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Run'), h('th', { class: 'n' }, 'Distance'), h('th', { class: 'n' }, 'Pace'), h('th', { class: 'n hide-s' }, 'Songs'))),
+			h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, w.one[0].toUpperCase() + w.one.slice(1)), h('th', { class: 'n' }, 'Distance'), h('th', { class: 'n' }, w.Rate), h('th', { class: 'n hide-s' }, 'Songs'))),
 			h('tbody', null, runs.map((r) =>
 				h('tr', { class: 'go', tabindex: '0', onclick: () => (location.hash = `#/run/${r.id}`), onkeydown: (e) => e.key === 'Enter' && (location.hash = `#/run/${r.id}`) },
 					h('td', { class: 'dim' }, day(r.start_time)),
 					h('td', null, r.name),
 					h('td', { class: 'n' }, fmt.dist(r.distance_m)),
-					h('td', { class: 'n' }, fmt.pace(r.distance_m / r.moving_s)),
+					h('td', { class: 'n' }, fmt.rate(r.distance_m / r.moving_s, sport)),
 					h('td', { class: 'n hide-s' }, r.songs || h('span', { class: 'dim' }, '–')),
 				),
 			)),
 		),
-	), all.length > runs.length && h('button', { class: 'btn more', onclick: () => ((state.allRuns = true), render(true)) }, `Show all ${all.length} runs`));
+	), all.length > runs.length && h('button', { class: 'btn more', onclick: () => ((state.allRuns = true), render(true)) }, `Show all ${all.length} ${w.many}`));
 }
 
-const RUN_TYPES = ['Run', 'TrailRun', 'VirtualRun'];
 const words = (type) => type.replace(/([a-z])([A-Z])/g, '$1 $2');
 
 const clockTime = (ts) => new Date(ts * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -528,7 +569,7 @@ const dayName = (ts) => {
 	const today = new Date().setHours(0, 0, 0, 0) / 1000;
 	return ts >= today ? 'Today' : ts >= today - 86400 ? 'Yesterday' : new Date(ts * 1000).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 };
-const kind = (a) => (RUN_TYPES.includes(a.type) ? 'Run' : words(a.type));
+const kind = (a) => ({ run: 'Run', ride: 'Ride' })[sportOf(a.type)] || words(a.type);
 
 /** A small tile with the activity's glyph (run, ride, weights), or its initial when there's no glyph. */
 function glyphTile(type) {
@@ -596,7 +637,7 @@ function opened(act, fmt) {
 		note,
 		act.songs.length ? h('p', { class: 'sub tally' }, `${plural(act.songs.length, 'song')} · music for ${duration(music)} of ${duration(act.elapsed_s)}`) : null,
 		table,
-		act.run_id ? h('a', { class: 'btn small more', href: `#/run/${act.run_id}` }, 'See pace song by song') : null,
+		act.run_id ? h('a', { class: 'btn small more', href: `#/run/${act.run_id}` }, `See ${WORDS[sportOf(act.type) || 'run'].rate} song by song`) : null,
 	);
 
 	const chart = activityChart(box, act, fmt);
@@ -618,7 +659,7 @@ function latest(fmt) {
 	const checked = (c) => (me.user.is_demo || !c.last_sync_at ? '' : ` Checked ${ago(c.last_sync_at)}.`);
 
 	const activities = recent.activities.map((a) =>
-		h('li', null, h('button', { class: `row${RUN_TYPES.includes(a.type) ? '' : ' off'}`, onclick: () => ((state.openActivity = a.id), render(true)) },
+		h('li', null, h('button', { class: `row${sportOf(a.type) ? '' : ' off'}`, onclick: () => ((state.openActivity = a.id), render(true)) },
 			glyphTile(a.type),
 			h('div', { class: 'who' },
 				h('b', null, a.name),
@@ -648,38 +689,60 @@ function latest(fmt) {
 	);
 }
 
-// Runs with music needed before the song cards replace the "collecting" view.
+// Runs with music needed before the song cards replace the "collecting" view. Rides need as many, counted apart.
 const RUNS_NEEDED = 5;
 
-function dashboard() {
-	const { me, insights: ins, runs } = state;
-	const fmt = formatter();
-	const page = h('div', { class: 'wrap' }, header(), statusBar(), notices());
+/** Running or Biking: which analysis is on screen. Both are always made; this only turns the page. */
+function sportTabs() {
+	return h('div', { class: 'sports', role: 'tablist', 'aria-label': 'Which analysis to show' }, SPORTS.map((sport) =>
+		h('button', {
+			role: 'tab',
+			'aria-selected': String(state.sport === sport),
+			onclick: () => {
+				state.sport = sport;
+				state.sportChosen = true;
+				state.allRuns = false;
+				render(true);
+			},
+		},
+			svg('svg', { class: 'glyph', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: GLYPHS[sport] })),
+			WORDS[sport].tab,
+			h('span', null, state.runs[sport].length),
+		)));
+}
 
-	// Until there are enough runs with music for the song cards to mean anything,
+function dashboard() {
+	const { sport } = state;
+	const ins = state.insights[sport];
+	const runs = state.runs[sport];
+	const w = WORDS[sport];
+	const fmt = formatter();
+	const page = h('div', { class: 'wrap' }, header(), statusBar(), notices(), sportTabs());
+
+	// Until there are enough runs (or rides) with music for the song cards to mean anything,
 	// the page shows what is being collected instead: the last 7 days.
 	const have = ins.totals.runs_with_music;
 	if (have < RUNS_NEEDED) {
 		page.append(h('div', { class: 'card note collecting' },
 			h('p', null,
-				h('strong', null, `Collecting your runs: ${have} of ${RUNS_NEEDED}`),
-				`Your song patterns appear after ${RUNS_NEEDED} runs with music. Cadence can only match songs it sees from the day you connect, so just keep running with Spotify on.`),
+				h('strong', null, `Collecting your ${w.many}: ${have} of ${RUNS_NEEDED}`),
+				`Your song patterns appear after ${RUNS_NEEDED} ${w.many} with music. Cadence can only match songs it sees from the day you connect, so just keep ${sport === 'ride' ? 'riding' : 'running'} with Spotify on.`),
 			h('i', { class: 'meter' }, h('i', { style: { width: `${(have / RUNS_NEEDED) * 100}%`, background: 'var(--pace)' } })),
 		));
 		page.append(latest(fmt));
 		if (runs.length) {
-			page.append(h('section', null, h('h2', null, 'Runs'), h('p', { class: 'sub' }, 'Open a run to see its pace song by song.'), runsTable(runs, fmt)));
+			page.append(h('section', null, h('h2', null, w.Many), h('p', { class: 'sub' }, `Open a ${w.one} to see its ${w.rate} song by song.`), runsTable(runs, fmt, sport)));
 		}
 		page.append(footer());
 		return page;
 	}
 
-	page.append(...story(ins, fmt));
+	page.append(...story(ins, fmt, sport));
 
 	page.append(h('section', null,
-		h('h2', null, 'Every run'),
-		h('p', { class: 'sub' }, 'Open one to see your pace song by song.'),
-		runsTable(runs, fmt),
+		h('h2', null, `Every ${w.one}`),
+		h('p', { class: 'sub' }, `Open one to see your ${w.rate} song by song.`),
+		runsTable(runs, fmt, sport),
 	));
 	page.append(footer());
 	return page;
@@ -689,15 +752,22 @@ function dashboard() {
 
 async function runPage(id) {
 	const fmt = formatter();
-	const page = h('div', { class: 'wrap' }, header(), h('a', { class: 'back', href: '#/' }, '← All runs'));
+	const back = h('a', { class: 'back', href: '#/' }, '← Back');
+	const page = h('div', { class: 'wrap' }, header(), back);
 	app.replaceChildren(page);
 	let run;
 	try {
 		run = await api(`api/runs/${id}`);
 	} catch (err) {
-		page.append(h('div', { class: 'card note' }, h('p', null, err.status === 404 ? 'That run could not be found.' : err.message)));
+		page.append(h('div', { class: 'card note' }, h('p', null, err.status === 404 ? 'That activity could not be found.' : err.message)));
 		return;
 	}
+	// A ride is told by its speed where a run is told by its pace; going back lands on that sport's tab.
+	const sport = run.sport === 'ride' ? 'ride' : 'run';
+	const w = WORDS[sport];
+	state.sport = sport;
+	state.sportChosen = true;
+	back.textContent = `← All ${w.many}`;
 	const speed = run.distance_m / run.moving_s;
 	const box = h('div', { class: 'chart' });
 	const songs = run.songs.filter((s) => s.moving_s >= 20);
@@ -707,17 +777,17 @@ async function runPage(id) {
 		h('p', { class: 'when' }, day(run.start_time, true)),
 		h('div', { class: 'tiles' },
 			tile('Distance', (run.distance_m / fmt.unitMeters).toFixed(2), fmt.unit),
-			tile('Average pace', fmt.pace(speed).split(' ')[0], `/${fmt.unit}`),
+			tile(`Average ${w.rate}`, fmt.rate(speed, sport).split(' ')[0], fmt.rate(speed, sport).split(' ')[1]),
 			tile('Moving time', duration(run.moving_s)),
 			run.avg_hr ? tile('Average heart rate', Math.round(run.avg_hr), 'bpm') : tile('Songs', songs.length),
 		),
 		h('section', null,
-			h('h2', null, 'Pace, song by song'),
-			h('p', { class: 'sub' }, songs.length ? 'Each shaded block is one song.' : 'No songs were matched to this run.'),
+			h('h2', null, `${w.Rate}, song by song`),
+			h('p', { class: 'sub' }, songs.length ? 'Each shaded block is one song.' : `No songs were matched to this ${w.one}.`),
 			h('div', { class: 'card' },
 				h('div', { class: 'legend' },
-					h('span', null, h('i', { class: 'key line', style: { background: 'var(--pace)', height: '3px' } }), 'Average pace per song'),
-					h('span', null, h('i', { class: 'key line faint', style: { background: 'var(--pace)' } }), 'Pace'),
+					h('span', null, h('i', { class: 'key line', style: { background: 'var(--pace)', height: '3px' } }), `Average ${w.rate} per song`),
+					h('span', null, h('i', { class: 'key line faint', style: { background: 'var(--pace)' } }), w.Rate),
 					run.streams.hr && h('span', null, h('i', { class: 'key line', style: { background: 'var(--heart)' } }), 'Heart rate'),
 				),
 				box,
@@ -727,17 +797,17 @@ async function runPage(id) {
 
 	if (songs.length) {
 		page.append(h('section', null,
-			h('h2', null, 'Songs on this run'),
-			h('p', { class: 'sub' }, 'Compared with your average pace for the whole run.'),
+			h('h2', null, `Songs on this ${w.one}`),
+			h('p', { class: 'sub' }, `Compared with your average ${w.rate} for the whole ${w.one}.`),
 			h('div', { class: 'card' }, h('div', { class: 'scroll' },
 				h('table', { class: 'table' },
-					h('thead', null, h('tr', null, h('th', null, 'Song'), h('th', { class: 'n hide-s' }, 'From'), h('th', { class: 'n' }, 'Pace'), h('th', { class: 'n' }, 'Against run average'), h('th', { class: 'n hide-s' }, 'Heart rate'))),
+					h('thead', null, h('tr', null, h('th', null, 'Song'), h('th', { class: 'n hide-s' }, 'From'), h('th', { class: 'n' }, w.Rate), h('th', { class: 'n' }, `Against ${w.one} average`), h('th', { class: 'n hide-s' }, 'Heart rate'))),
 					h('tbody', null, songs.map((s) => {
 						const v = s.distance_m / s.moving_s;
 						return h('tr', null,
 							h('td', null, h('div', { class: 'song' }, art(s.image, s.name, true), h('div', null, h('b', null, s.name), ' ', h('span', null, s.artist), s.skipped ? h('span', { class: 'dim' }, ' · cut short') : null))),
 							h('td', { class: 'n dim hide-s' }, `${Math.floor(s.start_s / 60)}:${String(Math.round(s.start_s % 60)).padStart(2, '0')}`),
-							h('td', { class: 'n' }, fmt.pace(v)),
+							h('td', { class: 'n' }, fmt.rate(v, sport)),
 							h('td', { class: 'n' }, versus(v / speed - 1)),
 							h('td', { class: 'n hide-s' }, s.avg_hr ? Math.round(s.avg_hr) : h('span', { class: 'dim' }, '–')),
 						);
@@ -754,8 +824,8 @@ async function runPage(id) {
 
 const EMAIL_SCENARIOS = [
 	{ id: 'welcome', kind: 'welcome', title: 'Welcome', when: 'Once, when you turn on email updates.', at: 'just now' },
-	{ id: 'collecting', kind: 'weekly', variant: 'collecting', title: 'Sunday roundup: still collecting', when: 'Sundays at 9am, until there are 5 runs with music.', at: 'Sun 9:00 AM' },
-	{ id: 'patterns', kind: 'weekly', variant: 'patterns', title: 'Sunday roundup: your patterns', when: 'Sundays at 9am, once there is enough data.', at: 'Sun 9:00 AM' },
+	{ id: 'collecting', kind: 'weekly', variant: 'collecting', title: 'Sunday roundup: still collecting', when: 'Sundays at 9am, until there are 5 runs or 5 rides with music.', at: 'Sun 9:00 AM' },
+	{ id: 'patterns', kind: 'weekly', variant: 'patterns', title: 'Sunday roundup: your patterns', when: 'Sundays at 9am, with running and biking once each has enough.', at: 'Sun 9:00 AM' },
 ];
 
 const ICONS = {
@@ -793,7 +863,7 @@ function emailsPage() {
 
 	const subject = h('div', { class: 'subject' }, '…');
 	const to = h('span', null, me.user.name);
-	const example = h('p', { class: 'fine left', hidden: true }, 'Example: this one uses the demo runner’s data. Yours takes over after 5 runs with music.');
+	const example = h('p', { class: 'fine left', hidden: true }, 'Example: this one uses the demo data. Yours takes over after 5 runs or 5 rides with music.');
 	api(`api/emails/${scenario.kind}${query}`).then((m) => ((subject.textContent = m.subject), (to.textContent = m.to), (example.hidden = !m.example))).catch(() => (subject.textContent = 'Could not load this email.'));
 
 	const group = (...names) => h('span', { class: 'tools' }, names.map(icon));
@@ -823,7 +893,7 @@ function emailsPage() {
 		header(),
 		h('a', { class: 'back', href: '#/' }, '← Back'),
 		h('h1', { class: 'title' }, me.user.is_demo ? 'Demo emails' : 'Emails'),
-		h('p', { class: 'when' }, me.user.is_demo ? 'What Cadence sends, filled in with the demo runner’s data.' : 'What Cadence sends, filled in with your own data.'),
+		h('p', { class: 'when' }, me.user.is_demo ? 'What Cadence sends, filled in with the demo data.' : 'What Cadence sends, filled in with your own data.'),
 		emailSettings(),
 		h('div', { class: 'mailroom' },
 			h('div', { class: 'scenarios', role: 'group', 'aria-label': 'Which email to show' },

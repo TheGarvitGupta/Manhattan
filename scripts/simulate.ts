@@ -1,9 +1,10 @@
-// Generates a simulated runner — runs with per-second pace and heart rate,
-// plus a Spotify listening history — and loads it as the demo account.
+// Generates a simulated runner who also rides — runs and rides with per-second
+// speed and heart rate, plus a Spotify listening history — and loads it as the
+// demo account.
 //
 //   npm run simulate                     local dev database
 //   npm run simulate -- --remote         the deployed database
-//   npm run simulate -- --runs 120 --weeks 40 --seed 7
+//   npm run simulate -- --runs 120 --rides 60 --weeks 40 --seed 7
 //
 // The demo account is stored exactly like a real one (runs, every kind of
 // activity, plays), so it goes through the same pages with no special cases.
@@ -24,6 +25,7 @@ const flag = (name: string, fallback: number) => {
 };
 const REMOTE = args.includes('--remote');
 const RUNS = flag('runs', 72);
+const RIDES = flag('rides', 44);
 const WEEKS = flag('weeks', 26);
 const SEED = flag('seed', 1);
 
@@ -232,10 +234,95 @@ function simulateRun(index: number): SimRun {
   return { name: `${PARTS[part]} ${kind.name}`, start, streams: s, plays, distance: d, moving: m, elapsed: t, avgHr: hrSum / (s.t.length - 1) };
 }
 
+// --- rides --------------------------------------------------------------------
+
+const RIDE_KINDS = [
+  { name: 'Ride', km: [18, 30], kmh: 26 },
+  { name: 'Ride', km: [18, 30], kmh: 26 },
+  { name: 'Tempo Ride', km: [22, 34], kmh: 29.5 },
+  { name: 'Long Ride', km: [45, 70], kmh: 25 },
+];
+
+// When the demo is already out, so a ride never lands on top of a run: one playlist cannot be on two activities at once.
+const busy: [number, number][] = [];
+
+/** A ride, built the way a run is: the same songs nudge its speed, with hills, junctions, power and cadence. */
+function simulateRide(index: number): SimRun {
+  const progress = index / Math.max(1, RIDES - 1); // 0 = oldest
+  const kind = pick(RIDE_KINDS);
+  const silent = rand() < 0.15;
+  const restless = rand();
+  const targetM = between(kind.km[0], kind.km[1]) * 1000 * (silent ? 1 : 1.12 - 0.24 * restless);
+  const base = (kind.kmh / 3.6) * (0.98 + 0.04 * progress) * (silent ? 0.985 : 1) * (1 + gauss() * 0.015);
+  const guess = targetM / base + 600;
+  let part = 0;
+  let start = 0;
+  for (let tries = 0; tries < 40; tries++) {
+    part = Math.floor(rand() * 3);
+    start = Math.floor(NOW - (1 - progress) * WEEKS * 7 * 86400 - between(0, 86400) - 3 * 3600) - (2 - part) * 5 * 3600;
+    if (start + guess < NOW - 1800 && !busy.some(([a, b]) => start < b + 3600 && start + guess > a - 3600)) break;
+  }
+
+  const plays: Play[] = [];
+  let songEnd = start - between(0, 90);
+  let current: Track | null = null;
+  const recent: string[] = [];
+  const altitude = (at: number) => Math.round((60 + 38 * Math.sin(at / 2400 + index + 0.7) + 12 * Math.sin(at / 610)) * 10) / 10;
+  const s: Streams = { t: [0], d: [0], m: [0], hr: [Math.round(between(90, 104))], w: [0], c: [0], a: [altitude(0)] };
+  let t = 0;
+  let d = 0;
+  let m = 0;
+  let wobble = 0;
+  let hr = s.hr![0]!;
+  let hrSum = 0;
+  let halt = 0; // seconds left at a junction
+
+  while (d < targetM) {
+    const clock = start + t;
+    if (!silent && clock >= songEnd) {
+      current = nextTrack(recent, progress);
+      recent.push(current.id);
+      if (recent.length > 8) recent.shift();
+      const skip = rand() < 0.04 + 0.4 * restless;
+      songEnd = Math.max(songEnd, clock) + (skip ? current.duration * between(0.3, 0.75) : current.duration);
+      plays.push({ played_at: Math.round(songEnd), track_id: current.id, duration_s: current.duration });
+    }
+    if (halt <= 0 && rand() < 0.004) halt = between(10, 45); // a junction now and then
+    const grade = Math.cos(d / 2400 + index + 0.7) + 0.35 * Math.cos(d / 610);
+    let v = 0;
+    let watts = 0;
+    if (halt > 0) {
+      halt -= STEP;
+    } else {
+      wobble = 0.85 * wobble + gauss() * 0.014;
+      const warmup = Math.min(1, 0.9 + t / 2400);
+      const fatigue = 1 - 0.04 * (d / targetM) ** 2;
+      const boost = current?.boost ?? 0;
+      v = base * warmup * fatigue * (1 - 0.13 * grade) * (1 + wobble) * (1 + boost);
+      watts = Math.max(0, Math.round(178 * (base / 7.2) * (1 + 0.3 * grade) * (1 + wobble * 3) * (1 + boost * 2)));
+      m += STEP;
+    }
+    t += STEP;
+    d += v * STEP;
+    const targetHr = v === 0 ? 112 : 136 + 12 * grade + 160 * (v / base - 1 + 0.13 * grade) + 10 * (d / targetM);
+    hr += (targetHr - hr) * 0.1 + gauss() * 0.6;
+    hrSum += hr;
+    s.t.push(t);
+    s.d.push(Math.round(d * 10) / 10);
+    s.m.push(m);
+    s.hr!.push(Math.round(hr));
+    s.w!.push(watts);
+    s.c!.push(v === 0 ? 0 : Math.round(86 - 5 * grade + gauss() * 2));
+    s.a!.push(altitude(d));
+  }
+  busy.push([start, start + t]);
+  return { name: `${PARTS[part]} ${kind.name}`, start, streams: s, plays, distance: d, moving: m, elapsed: t, avgHr: hrSum / (s.t.length - 1) };
+}
+
 // --- other activities ---------------------------------------------------------
 
-// A real account has more than runs. These land in the past week so the
-// "last 7 days" view shows rides with power, a gym session and a walk.
+// A real account has more than runs and rides. These land in the past week so
+// the "last 7 days" view shows a gym session and a walk as well.
 interface SimActivity {
   name: string;
   type: string;
@@ -316,23 +403,25 @@ for (const t of tracks) {
 }
 
 let songCount = 0;
-for (let i = 0; i < RUNS; i++) {
-  const run = simulateRun(i);
-  const stravaId = -(i + 1);
+const runs = Array.from({ length: RUNS }, (_, i) => simulateRun(i));
+for (const run of runs) busy.push([run.start, run.start + run.elapsed]);
+const rides = Array.from({ length: RIDES }, (_, i) => simulateRide(i));
+const all = [...runs.map((run, i) => ({ run, sport: 'run', type: 'Run', stravaId: -(i + 1) })), ...rides.map((run, i) => ({ run, sport: 'ride', type: 'Ride', stravaId: -(5000 + i) }))];
+for (const { run, sport, type, stravaId } of all) {
   const best = bestStretch(run.streams, 1000);
   const mile = bestStretch(run.streams, MILE_M);
   sql.push(
-    `INSERT INTO runs (user_id, strava_id, name, start_time, distance_m, moving_s, elapsed_s, avg_hr, stream_state, streams, matched_at, best_km_s, best_km_at, best_mi_s, best_mi_at) VALUES ` +
-      `(${USER}, ${stravaId}, ${q(run.name)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.moving}, ${run.elapsed}, ${run.avgHr.toFixed(1)}, 'ok', ${q(JSON.stringify(run.streams))}, ${NOW}, ${q(best?.seconds ?? null)}, ${q(best?.at ?? null)}, ${q(mile?.seconds ?? null)}, ${q(mile?.at ?? null)});`,
+    `INSERT INTO runs (user_id, strava_id, sport, name, start_time, distance_m, moving_s, elapsed_s, avg_hr, stream_state, streams, matched_at, best_km_s, best_km_at, best_mi_s, best_mi_at) VALUES ` +
+      `(${USER}, ${stravaId}, ${q(sport)}, ${q(run.name)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.moving}, ${run.elapsed}, ${run.avgHr.toFixed(1)}, 'ok', ${q(JSON.stringify(run.streams))}, ${NOW}, ${q(best?.seconds ?? null)}, ${q(best?.at ?? null)}, ${q(mile?.seconds ?? null)}, ${q(mile?.at ?? null)});`,
   );
   for (const p of run.plays) {
     sql.push(`INSERT OR IGNORE INTO plays (user_id, played_at, track_id) VALUES (${USER}, ${p.played_at}, ${q(p.track_id)});`);
   }
-  // Recent runs also appear in the activity list, as they would for a real account.
+  // Recent ones also appear in the activity list, as they would for a real account.
   if (run.start > NOW - 9 * 86400) {
     sql.push(
       `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m, elapsed_s, stream_state) VALUES ` +
-        `(${USER}, ${stravaId}, ${q(run.name)}, 'Run', ${run.start}, ${run.distance.toFixed(1)}, ${run.elapsed}, 'ok');`,
+        `(${USER}, ${stravaId}, ${q(run.name)}, ${q(type)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.elapsed}, 'ok');`,
     );
   }
   const songs = matchSongs(run.start, run.streams, run.plays);
@@ -347,10 +436,9 @@ for (let i = 0; i < RUNS; i++) {
   }
 }
 
+// (Rides are simulated in full above; these two are the kinds Cadence only lists.)
 const others = [
-  simulateOther('Ride', 'Lunch Ride', 1.3, 52, true),
   simulateOther('WeightTraining', 'Evening Workout', 2.7, 44, true),
-  simulateOther('Ride', 'Morning Ride', 4.4, 38, true),
   simulateOther('Walk', 'Afternoon Walk', 5.6, 31, false),
 ];
 others.forEach((a, i) => {
@@ -365,7 +453,7 @@ others.forEach((a, i) => {
 
 mkdirSync('.sim', { recursive: true });
 writeFileSync('.sim/demo.sql', sql.join('\n') + '\n');
-console.log(`Simulated ${RUNS} runs over ${WEEKS} weeks with ${songCount} songs, plus ${others.length} other activities this week (seed ${SEED}).`);
+console.log(`Simulated ${RUNS} runs and ${RIDES} rides over ${WEEKS} weeks with ${songCount} songs, plus ${others.length} other activities this week (seed ${SEED}).`);
 console.log(`Songs: ${Math.min(real.length, LIBRARY)} real ones from listening history, ${Math.max(0, LIBRARY - real.length)} made up.`);
 
 // What the simulator baked in, to check the dashboard against.

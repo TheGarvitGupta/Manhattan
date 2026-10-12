@@ -93,12 +93,15 @@ function responsive(container, draw) {
 // --- run chart ----------------------------------------------------------------
 
 /**
- * Pace through one run with the song that was playing behind it, and heart
- * rate in its own panel underneath (never a second axis on the pace plot).
+ * Pace through one run (or speed through one ride) with the song that was
+ * playing behind it, and heart rate in its own panel underneath (never a
+ * second axis on the pace plot).
  */
 export function runChart(container, run, fmt) {
 	const { t, d, m, hr } = run.streams;
 	const n = t.length;
+	const ride = run.sport === 'ride';
+	const rate = (v) => fmt.rate(v, ride ? 'ride' : 'run');
 
 	// Speed over a ~30 s window, using moving time so stops don't read as slow.
 	const speed = new Array(n).fill(null);
@@ -110,7 +113,7 @@ export function runChart(container, run, fmt) {
 		if (dm >= 10) speed[i] = (d[b] - d[a]) / dm;
 	}
 	const known = speed.filter((v) => v != null).sort((a, b) => a - b);
-	if (known.length < 2) return container.replaceChildren(h('p', { class: 'dim' }, 'Not enough data to draw this run.'));
+	if (known.length < 2) return container.replaceChildren(h('p', { class: 'dim' }, `Not enough data to draw this ${ride ? 'ride' : 'run'}.`));
 
 	const songs = run.songs.filter((x) => x.moving_s >= 20).map((x) => ({ ...x, speed: x.distance_m / x.moving_s }));
 	const lo = quantile(known, 0.03) * 0.96;
@@ -135,7 +138,7 @@ export function runChart(container, run, fmt) {
 		const x = (sec) => L + (sec / total) * (width - L - R);
 		const y = (v) => T + paceH - ((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * paceH;
 
-		const svg = s('svg', { viewBox: `0 0 ${width} ${height}`, height, role: 'img', 'aria-label': 'Pace through the run with the song playing at each moment' });
+		const svg = s('svg', { viewBox: `0 0 ${width} ${height}`, height, role: 'img', 'aria-label': ride ? 'Speed through the ride with the song playing at each moment' : 'Pace through the run with the song playing at each moment' });
 
 		// Song bands: neutral washes with a 2px surface gap between neighbours.
 		for (const song of songs) {
@@ -157,14 +160,25 @@ export function runChart(container, run, fmt) {
 
 		// Pace axis: labelled as pace, positioned by speed, faster at the top.
 		const unit = fmt.unitMeters;
-		const paceLo = unit / hi;
-		const paceHi = unit / lo;
-		const stepS = [10, 15, 20, 30, 60, 120].find((v) => (paceHi - paceLo) / v <= 5) || 120;
-		for (let p = Math.ceil(paceLo / stepS) * stepS; p <= paceHi; p += stepS) {
-			const yy = y(unit / p);
-			svg.append(s('line', { class: 'grid', x1: L, x2: width - R, y1: yy, y2: yy }), s('text', { x: L - 8, y: yy + 4, 'text-anchor': 'end' }, clock(p)));
+		if (ride) {
+			// A ride's axis is plain speed, in km/h or mph.
+			const perHour = 3600 / unit;
+			const stepV = [1, 2, 5, 10, 20].find((v) => ((hi - lo) * perHour) / v <= 5) || 20;
+			for (let v = Math.ceil((lo * perHour) / stepV) * stepV; v <= hi * perHour; v += stepV) {
+				const yy = y(v / perHour);
+				svg.append(s('line', { class: 'grid', x1: L, x2: width - R, y1: yy, y2: yy }), s('text', { x: L - 8, y: yy + 4, 'text-anchor': 'end' }, v));
+			}
+			svg.append(s('text', { x: 0, y: 10 }, `Speed, ${fmt.per}`));
+		} else {
+			const paceLo = unit / hi;
+			const paceHi = unit / lo;
+			const stepS = [10, 15, 20, 30, 60, 120].find((v) => (paceHi - paceLo) / v <= 5) || 120;
+			for (let p = Math.ceil(paceLo / stepS) * stepS; p <= paceHi; p += stepS) {
+				const yy = y(unit / p);
+				svg.append(s('line', { class: 'grid', x1: L, x2: width - R, y1: yy, y2: yy }), s('text', { x: L - 8, y: yy + 4, 'text-anchor': 'end' }, clock(p)));
+			}
+			svg.append(s('text', { x: 0, y: 10 }, `Pace, min/${fmt.unit}`));
 		}
-		svg.append(s('text', { x: 0, y: 10 }, `Pace, min/${fmt.unit}`));
 
 		// Time axis.
 		const baseY = hasHr ? hrTop + hrH : T + paceH + strip;
@@ -188,7 +202,7 @@ export function runChart(container, run, fmt) {
 			const above = word === 'Fastest';
 			const yy = y(song.speed) + (above ? -9 : 20);
 			const anchor = mid < L + 60 ? 'start' : mid > width - R - 60 ? 'end' : 'middle';
-			svg.append(s('text', { class: 'strong', x: mid, y: Math.max(12, yy), 'text-anchor': anchor }, `${word} ${fmt.pace(song.speed)}`));
+			svg.append(s('text', { class: 'strong', x: mid, y: Math.max(12, yy), 'text-anchor': anchor }, `${word} ${rate(song.speed)}`));
 		}
 
 		// Heart rate, in its own panel with its own scale.
@@ -229,9 +243,9 @@ export function runChart(container, run, fmt) {
 			const song = songAt(t[i]);
 			showTip(evt, [
 				h('div', { class: 't' }, `${clock(t[i])} in · ${fmt.dist(d[i])}`),
-				tipRow('var(--pace)', speed[i] == null ? 'Stopped' : fmt.pace(speed[i]), speed[i] == null ? '' : 'pace'),
+				tipRow('var(--pace)', speed[i] == null ? 'Stopped' : rate(speed[i]), speed[i] == null ? '' : ride ? 'speed' : 'pace'),
 				beat != null && tipRow('var(--heart)', beat, 'bpm'),
-				song && h('div', { class: 'song' }, h('b', null, song.name), h('div', { class: 't' }, `${song.artist} · ${fmt.pace(song.speed)} average`)),
+				song && h('div', { class: 'song' }, h('b', null, song.name), h('div', { class: 't' }, `${song.artist} · ${rate(song.speed)} average`)),
 			].filter(Boolean));
 		};
 		const leave = () => {
@@ -334,7 +348,7 @@ function measures(st, isRun, fmt) {
 		});
 		out.push(isRun
 			? { title: `Pace, min/${fmt.unit}`, color: 'var(--pace)', values, invert: true, steps: [10, 15, 20, 30, 60, 120, 300], tick: minSec, tip: (v) => [minSec(v), `/${fmt.unit}`] }
-			: { title: `Speed, ${fmt.unit}/h`, color: 'var(--pace)', values, tick: (v) => v, tip: (v) => [v.toFixed(1), `${fmt.unit}/h`] });
+			: { title: `Speed, ${fmt.per}`, color: 'var(--pace)', values, tick: (v) => v, tip: (v) => [v.toFixed(1), fmt.per] });
 	}
 	if (any(st.hr)) out.push({ title: 'Heart rate, bpm', color: 'var(--heart)', values: st.hr, tick: (v) => v, tip: (v) => [Math.round(v), 'bpm'] });
 	if (any(st.w)) out.push({ title: 'Power, watts', color: 'var(--power)', values: smooth(st.w, 2), tick: (v) => v, tip: (v) => [Math.round(v), 'W'] });

@@ -82,6 +82,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @keyframes bob { 40% { transform: translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .brand:hover .wordmark span { animation: none; } }
 
+/* Running | Biking: the two analyses, as tabs under the status strip */
+.sports { display: flex; gap: 6px; margin: 18px 0 4px; padding: 5px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.sports button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 11px 14px; border: 0; border-radius: 10px; background: none; font-size: 15px; font-weight: 600; color: var(--ink-2); }
+.sports button:hover { background: var(--wash); }
+.sports button[aria-selected="true"] { background: var(--accent); color: #fff; }
+.sports button span { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--wash); color: var(--ink-2); }
+.sports button[aria-selected="true"] span { background: rgba(255, 255, 255, 0.22); color: #fff; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; background: none; padding: 5px 10px; font-size: 13px; color: var(--ink-2); }
 .seg button[aria-pressed="true"] { background: var(--wash); color: var(--ink); font-weight: 600; }

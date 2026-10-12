@@ -13,6 +13,13 @@ const STRAVA_SCOPE = 'read,activity:read_all';
 const SPOTIFY_SCOPE = 'user-read-recently-played';
 
 export const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
+// Rides under the rider's own power. E-bikes are left out: the motor, not the music, sets the speed.
+export const RIDE_TYPES = new Set(['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide']);
+
+/** The two things Cadence analyses. Each is kept in `runs`, told apart by its `sport`. */
+export type Sport = 'run' | 'ride';
+export const SPORTS: Sport[] = ['run', 'ride'];
+export const sportOf = (type: string): Sport | null => (RUN_TYPES.has(type) ? 'run' : RIDE_TYPES.has(type) ? 'ride' : null);
 
 interface TokenSet {
   access_token: string;

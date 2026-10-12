@@ -1,7 +1,8 @@
 # Cadence
 
-Which songs make you run faster? Cadence lines up Strava runs with Spotify
-listening history and shows how pace moves with the music.
+Which songs make you run faster? Cadence lines up Strava runs and rides with
+Spotify listening history and shows how pace (or, on a bike, speed) moves with
+the music.
 
 Lives at `www.garvitgupta.com/cadence` as a Cloudflare Worker routed onto the
 main site. (This repo used to be called Manhattan; the 2020 Flask prototype is
@@ -17,6 +18,10 @@ still in the root as `*.py`.)
   stretch of a run, from the run's per-second distance stream.
 - **Insights** (`src/insights.ts`) compare each song with the pace of the run
   it played on, so a song isn't "slow" just because it comes up on easy days.
+- **Running and biking** are analysed apart, automatically. Rides live in the
+  `runs` table beside runs, told apart by `sport` ('run' or 'ride'); e-bike
+  rides are left out. Signed in, a Running / Biking tab turns between the two
+  analyses, and each needs its own five activities with music.
 
 Cadence can only match songs it saw at the time, so data builds from the day
 someone connects Spotify. Past runs can't be backfilled.
@@ -43,7 +48,7 @@ npm run dev             # http://127.0.0.1:8787/cadence/
 
 Choose **See the demo** to browse the simulated data. No API keys needed.
 
-`npm run simulate -- --runs 120 --weeks 40 --seed 7` makes a different runner.
+`npm run simulate -- --runs 120 --rides 60 --weeks 40 --seed 7` makes a different one.
 The script prints which songs it made fast and slow, so you can check the
 dashboard finds them.
 
@@ -107,7 +112,9 @@ Two emails, written in `src/emails.ts`, from `Cadence <no-reply@cadence.garvitgu
   "Confirm my email" button; nothing else is sent until they tap it.
 - **Sunday roundup**: 9am every Sunday in the reader's timezone. Their last 10
   songs and activities while Cadence is still collecting, or the top findings
-  once there are five runs with music.
+  once there are five runs with music. Biking joins the same email on the same
+  terms: its findings appear once there are five rides with music, and until
+  then the email says how many there are so far.
 
 Strava does not share an email address, so people enter one on the Emails
 page. The demo account's "Demo emails" button shows all three, filled in with

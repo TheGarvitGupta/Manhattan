@@ -1,7 +1,7 @@
-// Pulls new songs and runs for a user, then lines them up.
+// Pulls new songs, runs and rides for a user, then lines them up.
 
 import { bestStretch, matchSongs, MILE_M, normalizeStreams, Play, Streams } from './match';
-import { accessToken, markRevoked, RUN_TYPES, spotifyRecentlyPlayed, stravaActivities, stravaStreams, stravaUnits } from './providers';
+import { accessToken, markRevoked, sportOf, spotifyRecentlyPlayed, stravaActivities, stravaStreams, stravaUnits } from './providers';
 import { Budget, BudgetExceeded, Env, now, RateLimited } from './util';
 
 const DAY = 86400;
@@ -66,7 +66,7 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
     const units = await stravaUnits(token, budget);
     await env.DB.prepare(`UPDATE users SET units = ? WHERE id = ?`).bind(units ?? '-', userId).run();
   }
-  // Runs from before someone joined have no songs to match, so they are skipped.
+  // Runs and rides from before someone joined have no songs to match, so they are skipped.
   const cutoff = (user?.created_at ?? now()) - FIRST_SYNC_LOOKBACK;
   const activities = await stravaActivities(token, budget);
   if (activities === null) {
@@ -78,7 +78,7 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
   for (const a of activities) {
     const type = a.sport_type ?? a.type;
     const start = Math.floor(Date.parse(a.start_date) / 1000);
-    // Every activity is noted for the "recent activity" list; only runs are kept in full.
+    // Every activity is noted for the "recent activity" list; runs and rides are kept in full.
     stmts.push(
       env.DB.prepare(
         `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m, elapsed_s) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -86,13 +86,14 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
            name = excluded.name, type = excluded.type, distance_m = excluded.distance_m, elapsed_s = excluded.elapsed_s`,
       ).bind(userId, a.id, a.name, type, start, a.distance ?? 0, a.elapsed_time ?? 0),
     );
-    if (RUN_TYPES.has(type) && a.distance > 0 && start >= cutoff) {
+    const sport = sportOf(type);
+    if (sport && a.distance > 0 && start >= cutoff) {
       stmts.push(
         env.DB.prepare(
-          `INSERT INTO runs (user_id, strava_id, name, start_time, distance_m, moving_s, elapsed_s, avg_hr)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT (user_id, strava_id) DO UPDATE SET name = excluded.name`,
-        ).bind(userId, a.id, a.name, start, a.distance, a.moving_time, a.elapsed_time, a.average_heartrate ?? null),
+          `INSERT INTO runs (user_id, strava_id, name, start_time, distance_m, moving_s, elapsed_s, avg_hr, sport)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (user_id, strava_id) DO UPDATE SET name = excluded.name, sport = excluded.sport`,
+        ).bind(userId, a.id, a.name, start, a.distance, a.moving_time, a.elapsed_time, a.average_heartrate ?? null, sport),
       );
     }
   }
