@@ -503,18 +503,10 @@ export function activityChart(container, act, fmt) {
 			});
 			const song = songs.find((q) => sec >= q.a && sec < q.b);
 			if (song) {
-				// The song's own averages, so nothing needs a separate table.
-				const avg = stretchStats(streams, song.a, song.b);
-				const parts = [
-					avg.speed != null && fmt.pace(avg.speed),
-					avg.hr != null && `${Math.round(avg.hr)} bpm`,
-					avg.watts != null && `${Math.round(avg.watts)} W`,
-				].filter(Boolean);
 				rows.push(h('div', { class: 'song' },
 					h('b', null, song.name),
 					h('div', { class: 't' }, song.artist),
 					h('div', { class: 't' }, `${clockTime(song.from)} – ${clockTime(song.to)} · played for ${minSec(song.b - song.a)}`),
-					parts.length ? h('div', { class: 't' }, `Average while playing: ${parts.join(' · ')}`) : null,
 				));
 			} else {
 				rows.push(h('div', { class: 'song t' }, 'No song playing'));
