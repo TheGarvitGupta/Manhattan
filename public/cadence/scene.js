@@ -6,13 +6,13 @@
 //
 // scene(host, { room, covers, units }) lays the canvas behind everything in `host`. The run keeps to the foot of it, as tall
 // as `room` (an empty element left for it below the words). `covers` is a promise of cover addresses, and `units()` says
-// 'mi' or 'km' whenever it is asked.
+// 'mi' or 'km' whenever it is asked. `foot()`, if given, is how many pixels to keep clear at the very bottom.
 export function scene(host, opts) {
 	var cv = document.createElement("canvas"), ctx = cv.getContext("2d");
 	cv.setAttribute("aria-hidden", "true");
 	host.prepend(cv);
 
-	var TALL = 378;              // drawn as if the run were this tall, and scaled to fit the room it is given
+	var TALL = 424;              // drawn as if the run were this tall, and scaled to fit the room it is given
 	var BW = 696;                // how wide the strip then is, in those units: wider on a wide page
 	var RX = 286;                 // where the runner is, across
 	var LEAN = Math.tan(11 * Math.PI / 180);   // the logo's bars lean this far
@@ -93,7 +93,8 @@ export function scene(host, opts) {
 	}
 	function ease(x) { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); }
 	function clamp(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
-	function rise(v) { return 104 + 112 * ease(v); }   // how high the ground stands for a speed
+	var lift = 0;
+	function rise(v) { return 150 + lift + 112 * ease(v); }   // how high the ground stands for a speed: always clear of the songs' dock at the foot
 	function hash(n) { var x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
 
 	var SP = LW / Math.round(LW / 13), NB = Math.round(LW / SP);          // the bars, a whole number of them round the loop
@@ -106,8 +107,9 @@ export function scene(host, opts) {
 		dpr = Math.min(window.devicePixelRatio || 1, 2);
 		cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
 		// as large as the room under the words allows, down to a strip 380 across: on a phone held upright the runner stays big and fewer bars show
-		k = Math.min(room / TALL, r.width / 380, 2.2); BW = r.width / k; VH = r.height / k;
-		RX = Math.round(BW * 0.42);
+		var foot = opts.foot ? opts.foot() : 0;   // room kept clear at the very bottom, for whatever the page puts there
+		k = Math.min((room - foot) / TALL, r.width / 380, 2.2); BW = r.width / k; VH = r.height / k; lift = foot / k;
+		RX = Math.round(BW * 0.5);   // the runner in the middle, under the words
 	}
 
 	// loose things: the streaks going by, sparks off the feet, rings where a foot lands
@@ -363,19 +365,21 @@ export function scene(host, opts) {
 		g.addColorStop(0, "rgba(26,14,84,0)"); g.addColorStop(1, "rgba(26,14,84,0.75)");
 		ctx.fillStyle = g; ctx.fillRect(0, VH - 70, BW, 70);
 
-		// at the foot: what is playing, with what is next queued behind it
-		var slide = 1 - ease((clock - changed) / 0.5), n = SONGS.length;
-		function slot(i) { return i < 0 ? [-30, VH - 50, 30] : i === 0 ? [48, VH - 50, 48] : [48 + 22 + i * 40, VH - 50, 28]; }
+		// at the foot, under the runner: a dock with what is playing, and what is next queued beside it
+		var slide = 1 - ease((clock - changed) / 0.5), n = SONGS.length, dy = VH - 62 - lift;
+		ctx.fillStyle = "rgba(18,9,66,0.55)"; rrect(RX - 106, dy - 36, 212, 80, 22); ctx.fill();
+		ctx.strokeStyle = "rgba(255,255,255,0.14)"; ctx.lineWidth = 1; ctx.stroke();
+		function slot(i) { return i < 0 ? [RX - 118, dy - 4, 26] : i === 0 ? [RX - 68, dy - 4, 48] : [RX - 68 + 22 + i * 40, dy - 4, 28]; }
 		for (j = 3; j >= -1; j--) {
 			var a0 = slot(j), a1 = slot(j + 1), qs = SONGS[((song.i + j) % n + n) % n];
 			if (j === -1 && slide < 0.01) continue;
-			var al = j === -1 ? slide : j === 0 ? 1 : (j === 3 ? 0.55 * (1 - slide) : 0.55);
+			var al = j === -1 ? slide * slide : j === 0 ? 1 : (j === 3 ? 0.6 * (1 - slide) : 0.6);
 			cover(qs, a0[0] + (a1[0] - a0[0]) * slide, a0[1], a0[2] + (a1[2] - a0[2]) * slide, al, j === 0);
 		}
 		var done = ((clock % T) - song.at) / song.dur;   // how far through the song
 		ctx.lineCap = "round"; ctx.lineWidth = 3;
-		ctx.strokeStyle = "rgba(255,255,255,0.22)"; line(26, VH - 13, 70, VH - 13);
-		ctx.strokeStyle = song.hot ? YELLOW : WHITE; line(26, VH - 13, 26 + 44 * clamp(done), VH - 13);
+		ctx.strokeStyle = "rgba(255,255,255,0.22)"; line(RX - 90, dy + 32, RX + 90, dy + 32);
+		ctx.strokeStyle = song.hot ? YELLOW : WHITE; line(RX - 90, dy + 32, RX - 90 + 180 * clamp(done), dy + 32);
 
 		// over the runner's head, the pace: minutes a kilometre, or a mile. Through the fast song it says so, in yellow.
 		var miles = opts.units() === "mi", fast = song.hot && hot > 0.5;

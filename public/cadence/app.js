@@ -174,22 +174,27 @@ function landing() {
 	// The words stand on a moving picture: a runner crossing a playlist, the run kept to the room left for it under them.
 	const room = h('div', { class: 'hero-run' });
 	const hero = h('div', { class: 'hero' },
-		h('div', { class: 'hero-top' }, header()),
 		h('div', { class: 'hero-copy' },
 			error && h('div', { class: 'card note error' }, h('p', null, error)),
 			emailNotice(),
-			h('div', { class: 'joined' }, logo('strava'), 'Strava', h('i', null, '+'), logo('spotify'), 'Spotify'),
+			h('div', { class: 'hero-brand', role: 'img', 'aria-label': 'Cadence' }, h('img', { src: 'icon.svg', alt: '' }), wordmark()),
 			h('h1', null, 'Which songs make you run faster?'),
 			h('p', { class: 'lede' }, 'Your pace, song by song.'),
-			h('div', { class: 'actions' },
-				h('a', { class: 'btn strava', href: 'auth/strava' }, 'Connect with Strava'),
-				h('button', { class: 'btn', onclick: () => act(() => api('auth/demo', 'POST')) }, 'See the demo'),
+			h('a', { class: 'btn strava start', href: 'auth/strava', 'aria-label': 'Start: connect with Strava' },
+				logo('strava'),
+				'Start',
+				svg('svg', { class: 'chevron', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: 'M9 5l7 7-7 7' })),
+			),
+			h('button', { class: 'demo-link', onclick: () => act(() => api('auth/demo', 'POST')) },
+				'See a demo',
+				svg('svg', { class: 'chevron', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: 'M9 5l7 7-7 7' })),
 			),
 		),
 		room,
+		h('div', { class: 'joined' }, logo('strava'), 'Strava', h('i', null, '+'), logo('spotify'), 'Spotify'),
 	);
 	// Real covers for the songs underfoot, a different handful each visit.
-	scene(hero, { room, units: () => state.units, covers: api('api/covers').then((r) => r.covers).catch(() => []) });
+	scene(hero, { room, units: () => state.units, foot: () => (matchMedia('(max-width: 640px)').matches ? 48 : 0), covers: api('api/covers').then((r) => r.covers).catch(() => []) });
 
 	// The picture fills the screen, edge to edge; the three steps and the small print are just below it.
 	return h('main', { class: 'landing' },

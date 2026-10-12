@@ -130,21 +130,33 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .joined { display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px 6px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 13px; font-weight: 600; }
 .joined .mark, .step .mark { width: 16px; height: 16px; }
 .joined i { font-style: normal; color: var(--muted); margin: 0 3px; }
-/* The front page's words stand on a moving picture (scene.js) that fills the screen: the canvas lies behind them, and the
-   run takes whatever room is left under them (.hero-run). */
+/* The front page is one moving picture (scene.js) that fills the screen. On it, in the middle: the name, large, the
+   question, and one way in. The canvas lies behind, and the run takes whatever room is left under the words (.hero-run). */
 .hero { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; min-height: 100vh; min-height: 100svh; background: #3a27a8; color: #fff; }
 .hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
-.hero-top { width: 100%; max-width: 1040px; margin: 0 auto; padding: 0 20px; }
-.hero .wordmark .tall { color: #ffd24a; }
-.hero-copy { max-width: 760px; margin: 0 auto; padding: clamp(12px, 4.5vh, 60px) 20px 0; }
-.hero .lede { color: rgba(255, 255, 255, 0.8); }
-.hero .joined, .hero .btn, .hero .card { color: var(--ink); }
-.hero .joined { border-color: transparent; }
-.hero .btn.strava { color: #fff; }
-/* On the picture a hovered button stays solid: the usual see-through wash would let the violet through. */
-.hero .btn:not(.strava):hover { background: color-mix(in srgb, var(--surface) 88%, var(--ink)); }
-.hero .card { margin-bottom: 18px; }
-.hero-run { flex: 1; min-height: clamp(220px, 30vh, 360px); }
+.hero-copy { display: flex; flex-direction: column; align-items: center; max-width: 760px; margin: 0 auto; padding: clamp(28px, 8vh, 96px) 20px 0; }
+.hero-brand { display: flex; align-items: center; gap: clamp(12px, 1.8vw, 20px); }
+.hero-brand img { width: clamp(52px, 7.6vw, 84px); height: auto; border-radius: 24%; box-shadow: 0 14px 44px rgba(12, 4, 60, 0.45); }
+.hero-brand .wordmark { font-size: clamp(54px, 8.6vw, 96px); padding-bottom: 0.08em; }
+.hero-brand .wordmark .tall { color: #ffd24a; }
+.hero-brand:hover .wordmark span { animation: bob 0.5s ease-in-out; }
+.landing .hero h1 { font-size: clamp(22px, 3.3vw, 36px); line-height: 1.15; letter-spacing: -0.025em; margin-top: clamp(16px, 2.6vh, 28px); }
+.landing .hero .lede { color: rgba(255, 255, 255, 0.78); font-size: clamp(16px, 1.8vw, 20px); margin: 8px 0 0; }
+.start { margin-top: clamp(20px, 3.4vh, 34px); padding: 15px 22px 15px 24px; border-radius: 16px; font-size: 19px; gap: 10px; color: #fff; box-shadow: 0 12px 34px rgba(252, 76, 2, 0.38); transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.start:hover { transform: translateY(-1px); box-shadow: 0 16px 40px rgba(252, 76, 2, 0.5); }
+.start .mark.strava { width: 20px; height: 20px; fill: #fff; }
+.chevron { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s ease; }
+.start:hover .chevron, .demo-link:hover .chevron { transform: translateX(3px); }
+.demo-link { display: inline-flex; align-items: center; gap: 3px; margin-top: 14px; padding: 6px 8px; border: 0; background: none; color: rgba(255, 255, 255, 0.86); font-size: 15px; font-weight: 600; }
+.demo-link:hover { color: #fff; }
+.demo-link .chevron { width: 14px; height: 14px; }
+.hero .card { margin-bottom: 18px; color: var(--ink); }
+.hero-run { flex: 1; min-height: clamp(240px, 34vh, 400px); }
+/* Strava + Spotify, tucked into the corner */
+.hero > .joined { position: absolute; left: 20px; bottom: 20px; color: var(--ink); border-color: transparent; }
+/* on a phone the songs' dock has the middle of the foot, so the pair sits under it, centred (scene.js is told to leave the room) */
+@media (max-width: 640px) { .hero > .joined { left: 50%; bottom: 12px; transform: translateX(-50%); white-space: nowrap; } }
+@media (prefers-reduced-motion: reduce) { .start, .chevron { transition: none; } .hero-brand:hover .wordmark span { animation: none; } }
 .steps { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 26px; color: var(--ink-2); font-size: 14px; font-weight: 500; }
 .steps > i { font-style: normal; color: var(--muted); }
 .step { display: inline-flex; align-items: center; gap: 7px; }
