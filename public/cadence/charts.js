@@ -50,6 +50,14 @@ export function hideTip() {
 	tip().hidden = true;
 }
 
+/** The head of a tooltip: the song's cover, name and artist, with a short note (a time, a pace) at the right. */
+const tipSong = (song, note) =>
+	h('div', { class: 'head' },
+		song && song.image ? h('img', { src: song.image, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { class: 'none', 'aria-hidden': 'true' }, '♪'),
+		h('div', { class: 'who' }, h('b', null, song ? song.name : 'No song playing'), song ? h('span', null, song.artist) : null),
+		note ? h('span', { class: 'note' }, note) : null,
+	);
+
 const tipRow = (color, value, label) =>
 	h('div', { class: 'r' }, color && h('i', { class: 'key line', style: { background: color } }), h('b', null, value), h('span', null, label));
 
@@ -491,7 +499,9 @@ export function activityChart(container, act, fmt) {
 			cross.setAttribute('x1', x(sec));
 			cross.setAttribute('x2', x(sec));
 			cross.setAttribute('visibility', 'visible');
-			const rows = [h('div', { class: 't' }, `${clockTime(act.start_time + sec)} · ${minSec(sec)} in`)];
+			// The song first, as the page is about songs; then what the body was doing at that moment.
+			const song = songs.find((q) => sec >= q.a && sec < q.b);
+			const figures = [];
 			panels.forEach((m, k) => {
 				const v = m.values[i];
 				dots[k].setAttribute('visibility', v == null ? 'hidden' : 'visible');
@@ -499,18 +509,9 @@ export function activityChart(container, act, fmt) {
 				dots[k].setAttribute('cx', x(sec));
 				dots[k].setAttribute('cy', m.y(v));
 				const [value, unit] = m.tip(v);
-				rows.push(tipRow(m.color, value, unit));
+				figures.push(h('span', null, h('i', { style: { background: m.color } }), h('b', null, value), unit));
 			});
-			const song = songs.find((q) => sec >= q.a && sec < q.b);
-			if (song) {
-				rows.push(h('div', { class: 'song' },
-					h('b', null, song.name),
-					h('div', { class: 't' }, song.artist),
-					h('div', { class: 't' }, `${clockTime(song.from)} – ${clockTime(song.to)} · played for ${minSec(song.b - song.a)}`),
-				));
-			} else {
-				rows.push(h('div', { class: 'song t' }, 'No song playing'));
-			}
+			const rows = [tipSong(song, clockTime(act.start_time + sec)), figures.length ? h('div', { class: 'figs' }, figures) : null].filter(Boolean);
 			showTip(evt, rows);
 		};
 		hit.addEventListener('pointermove', move);
@@ -703,11 +704,7 @@ export function routeChart(container, polyline, act, streams, fmt) {
 			coverColor(c.song.image).then((color) => color && (ring.style.stroke = color));
 			const hit = s('rect', { class: 'hit', x: cx - c.size / 2 - 4, y: cy - c.size / 2 - 4, width: c.size + 8, height: c.size + 8 });
 			const tell = (evt) =>
-				showTip(evt, [
-					h('b', null, c.song.name),
-					h('div', { class: 't' }, c.song.artist),
-					c.speed != null ? h('div', { class: 't' }, fmt.pace(c.speed)) : null,
-				].filter(Boolean));
+				showTip(evt, [tipSong(c.song, c.speed != null ? fmt.pace(c.speed) : '')]);
 			hit.addEventListener('pointermove', tell);
 			hit.addEventListener('pointerdown', tell);
 			hit.addEventListener('pointerleave', hideTip);
