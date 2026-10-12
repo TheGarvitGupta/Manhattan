@@ -4,7 +4,7 @@ import { scene } from './scene.js';
 
 const app = document.getElementById('app');
 // Running and biking are analysed apart: `insights` and `runs` each hold one of each ({ run, ride }), and `sport` is the tab that is open.
-const state = { me: null, insights: null, runs: null, recent: null, sport: 'run', sportChosen: false, units: 'km', allRuns: false, openActivity: null, emailScenario: 'patterns' };
+const state = { me: null, insights: null, runs: null, recent: null, sport: 'run', sportChosen: false, units: 'km', allRuns: false, openActivity: null, filter: new Set(), emailScenario: 'patterns' };
 
 // Units: what the person picks here, else their Strava setting when Strava
 // shares it, else whatever the rest of garvitgupta.com is showing them: its
@@ -32,8 +32,8 @@ try {
 // How each is spoken of. A run is told by its pace (5:19 /km), a ride by its speed (28.4 km/h).
 const SPORTS = ['run', 'ride'];
 const WORDS = {
-	run: { tab: 'Running', one: 'run', many: 'runs', Many: 'Runs', verb: 'run', did: 'ran', rate: 'pace', Rate: 'Pace' },
-	ride: { tab: 'Biking', one: 'ride', many: 'rides', Many: 'Rides', verb: 'ride', did: 'rode', rate: 'speed', Rate: 'Speed' },
+	run: { tab: 'Running', one: 'run', many: 'runs', verb: 'run', did: 'ran', rate: 'pace', Rate: 'Pace' },
+	ride: { tab: 'Biking', one: 'ride', many: 'rides', verb: 'ride', did: 'rode', rate: 'speed', Rate: 'Speed' },
 };
 const RUN_TYPES = ['Run', 'TrailRun', 'VirtualRun'];
 const RIDE_TYPES = ['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide'];
@@ -72,10 +72,6 @@ const versus = (rel) => (Math.abs(rel) < 0.0005 ? 'Same' : `${percent(rel)} ${re
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const day = (ts, long) =>
 	new Date(ts * 1000).toLocaleDateString(undefined, long ? { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
-const ago = (ts) => {
-	const m = Math.round((Date.now() / 1000 - ts) / 60);
-	return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
-};
 
 // --- server -------------------------------------------------------------------
 
@@ -171,12 +167,11 @@ function header() {
 	return h('header', { class: 'top' },
 		h('a', { class: 'brand', href: '#/', 'aria-label': 'Cadence' }, h('img', { src: 'icon.svg', alt: '' }), wordmark()),
 		me && h('div', { class: 'seg', role: 'group', 'aria-label': 'Units' }, unitButton('km'), unitButton('mi')),
-		me && me.user.is_demo && h('a', { class: 'btn small', href: '#/emails' }, 'Demo emails'),
 		me && h('details', { class: 'menu' },
 			h('summary', null, me.user.avatar ? h('img', { class: 'avatar', src: me.user.avatar, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { class: 'avatar' }), me.user.name),
 			h('div', { class: 'sheet' },
 				!me.user.is_demo && h('button', { onclick: () => act(() => api('api/sync', 'POST')) }, 'Sync now'),
-				!me.user.is_demo && h('button', { onclick: () => (location.hash = '#/emails') }, 'Emails'),
+				h('button', { onclick: () => (location.hash = '#/emails') }, 'Emails'),
 				!me.user.is_demo && me.spotify.connected && h('button', { onclick: () => confirm('Disconnect Spotify? Songs already matched are kept.') && act(() => api('api/spotify', 'DELETE')) }, 'Disconnect Spotify'),
 				h('button', { onclick: () => act(() => api('auth/logout', 'POST')) }, me.user.is_demo ? 'Leave the demo' : 'Sign out'),
 				!me.user.is_demo && h('button', { class: 'danger', onclick: () => confirm('Delete your account and everything Cadence has stored about you? This cannot be undone.') && act(() => api('api/account', 'DELETE')) }, 'Delete my account'),
@@ -314,28 +309,36 @@ const agoShort = (ts) => {
 // One strip under the header: is each service connected, when was it last
 // checked, and how far back the data goes. It keeps itself current.
 const statusNode = h('div', { class: 'status' });
+// The two chips are made once and kept current. They sit in the strip, or at the head of the Activity cards when those are on the page.
+const chips = { strava: h('span'), spotify: h('span') };
+let chipsInCards = false;
 let statusStarted = false;
 
 function paintStatus() {
 	const me = state.me;
 	if (!me) return statusNode.replaceChildren();
-	const chip = (key, label) => {
+	for (const [key, label] of [['strava', 'Strava'], ['spotify', 'Spotify']]) {
 		const c = me[key];
 		const good = c.connected && c.ok;
 		const text = me.user.is_demo ? 'sample data' : !c.connected ? 'not connected' : !good ? 'needs reconnecting' : c.last_sync_at ? `checked ${agoShort(c.last_sync_at)}` : 'checking soon';
-		return h('span', { class: `chip${good ? '' : ' bad'}`, title: `${label}: ${good ? 'connected' : 'not connected'}` },
+		chips[key].className = `chip${good ? '' : ' bad'}`;
+		chips[key].title = `${label}: ${good ? 'connected' : 'not connected'}`;
+		chips[key].replaceChildren(
 			svg('svg', { class: `mark ${key}`, viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: MARKS[key] })),
 			h('b', null, label),
 			h('span', null, text),
 			h('i', { class: 'dot', 'aria-hidden': 'true' }),
 		);
-	};
+	}
 	// "Data since" only appears once there is some data; nothing is shown in its place.
 	const since = me.since ? [h('span', { class: 'since' }, `Data since ${new Date(me.since * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`)] : [];
-	statusNode.replaceChildren(chip('strava', 'Strava'), chip('spotify', 'Spotify'), ...since);
+	const want = [...(chipsInCards ? [] : [chips.strava, chips.spotify]), ...since];
+	// Only touched when it changes, so the chips are not pulled out of the cards each second.
+	if (want.length !== statusNode.children.length || want.some((n, i) => n !== statusNode.children[i] && !(n.className === 'since' && statusNode.children[i].className === 'since' && n.textContent === statusNode.children[i].textContent))) statusNode.replaceChildren(...want);
 }
 
-function statusBar() {
+function statusBar(inCards = false) {
+	chipsInCards = inCards;
 	paintStatus();
 	if (!statusStarted) {
 		statusStarted = true;
@@ -652,40 +655,145 @@ function opened(act, fmt) {
 	return card;
 }
 
-/** The latest activities and songs side by side; opening an activity lays it out against its songs. */
-function latest(fmt) {
-	const { me, recent } = state;
-	const open = recent.activities.find((a) => a.id === state.openActivity);
-	const checked = (c) => (me.user.is_demo || !c.last_sync_at ? '' : ` Checked ${ago(c.last_sync_at)}.`);
+// Long lists are laid out a screenful at a time, more as the list is scrolled.
+const ROWS_AT_ONCE = 60;
+function rows(items, row, empty) {
+	if (!items.length) return h('p', { class: 'dim' }, empty);
+	const ul = h('ul', { class: 'rows' });
+	let shown = 0;
+	const more = () => {
+		ul.append(...items.slice(shown, shown + ROWS_AT_ONCE).map(row));
+		shown = Math.min(items.length, shown + ROWS_AT_ONCE);
+	};
+	ul.addEventListener('scroll', () => {
+		if (shown < items.length && ul.scrollTop + ul.clientHeight > ul.scrollHeight - 400) more();
+	});
+	more();
+	return ul;
+}
 
-	const activities = recent.activities.map((a) =>
+/** The covers of an activity's songs, small and overlapping, then how many there were. */
+function songsPill(songs) {
+	if (!songs.length) return h('span', { class: 'pill none' }, 'no songs');
+	const seen = new Set();
+	const covers = songs.filter((s) => s.image && !seen.has(s.image) && seen.add(s.image)).slice(0, 5);
+	return h('span', { class: 'heard' },
+		covers.length ? h('span', { class: 'covers', 'aria-hidden': 'true' }, covers.map((s) => h('img', { src: s.image, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }))) : null,
+		h('span', { class: 'pill' }, plural(songs.length, 'song')),
+	);
+}
+
+// The filter's menu closes when anything else is pressed.
+let closeFilter = null;
+document.addEventListener('click', () => closeFilter && closeFilter());
+document.addEventListener('keydown', (e) => e.key === 'Escape' && closeFilter && closeFilter());
+
+/** Every activity and every song, side by side; opening an activity lays it out against its songs. */
+function latest(fmt) {
+	const { me, recent, filter } = state;
+	const open = recent.activities.find((a) => a.id === state.openActivity);
+
+	const activity = (a) =>
 		h('li', null, h('button', { class: `row${sportOf(a.type) ? '' : ' off'}`, onclick: () => ((state.openActivity = a.id), render(true)) },
 			glyphTile(a.type),
 			h('div', { class: 'who' },
-				h('b', null, a.name),
-				h('span', null, `${kind(a)} · ${duration(a.elapsed_s)} · ${a.songs.length ? plural(a.songs.length, 'song') : 'no songs'}`),
+				h('div', { class: 'meta' }, h('b', null, a.name), h('span', { class: 'at' }, `${dayName(a.start_time)}, ${clockTime(a.start_time)}`)),
+				h('div', { class: 'meta' }, h('span', null, `${kind(a)} · ${duration(a.elapsed_s)}`), songsPill(a.songs)),
 			),
-			h('span', { class: 'at' }, `${dayName(a.start_time)}, ${clockTime(a.start_time)}`),
 			h('span', { class: 'go', 'aria-hidden': 'true' }, '›'),
-		)));
+		));
 
-	const songs = recent.songs.map((s) =>
+	const song = (s) =>
 		h('li', null, h('div', { class: 'row' },
 			art(s.image, s.name, true),
 			h('div', { class: 'who' }, h('b', null, s.name), h('span', null, s.artist)),
 			h('span', { class: 'at' }, `${dayName(s.to)}, ${clockTime(s.to)} · ${minSec(s.to - s.from)}`),
-		)));
+		));
 
-	const list = (rows, empty) => (rows.length ? h('ul', { class: 'rows' }, rows) : h('p', { class: 'dim' }, empty));
+	// The Strava card: its list, the count beside the chip, and the filter with its menu.
+	const count = h('span', { class: 'count' });
+	const listed = h('div');
+	const menu = h('div', { class: 'pick', role: 'menu', hidden: true, onclick: (e) => e.stopPropagation() });
+	const toggle = h('button', {
+		class: 'filter', 'aria-haspopup': 'menu', 'aria-expanded': 'false',
+		onclick: (e) => {
+			e.stopPropagation();
+			const opening = menu.hidden;
+			if (closeFilter) closeFilter();
+			if (opening) {
+				menu.hidden = false;
+				toggle.setAttribute('aria-expanded', 'true');
+				closeFilter = () => ((menu.hidden = true), toggle.setAttribute('aria-expanded', 'false'), (closeFilter = null));
+			}
+		},
+	}, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: 'M5 8h14M8 12h8M10.5 16h3' })));
+	const paint = () => {
+		const shown = filter.size ? recent.activities.filter((a) => filter.has(sportOf(a.type))) : recent.activities;
+		const all = recent.activities.length;
+		count.textContent = filter.size ? `${shown.length} of ${all}` : all === 1 ? '1 activity' : `${all} activities`;
+		toggle.classList.toggle('on', filter.size > 0);
+		toggle.setAttribute('aria-label', filter.size ? `Filter activities, showing ${SPORTS.filter((k) => filter.has(k)).map((k) => WORDS[k].tab.toLowerCase()).join(' and ')}` : 'Filter activities');
+		toggle.title = filter.size ? `Showing ${SPORTS.filter((k) => filter.has(k)).map((k) => WORDS[k].tab.toLowerCase()).join(' and ')}` : 'Filter activities';
+		listed.replaceChildren(rows(shown, activity, filter.size ? 'No activities of that kind yet.' : 'No activities yet.'));
+		menu.replaceChildren(
+			...SPORTS.map((k) =>
+				h('button', { role: 'menuitemcheckbox', 'aria-checked': String(filter.has(k)), onclick: () => ((filter.has(k) ? filter.delete(k) : filter.add(k)), paint()) },
+					svg('svg', { class: 'glyph', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: GLYPHS[k] })),
+					h('span', null, WORDS[k].tab),
+					svg('svg', { class: 'tick', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: 'M5 12.5l4.5 4.5L19 7.5' })),
+				)),
+			h('button', { class: 'clear', role: 'menuitem', disabled: !filter.size, onclick: () => (filter.clear(), paint(), closeFilter && closeFilter()) }, 'Remove filter'),
+		);
+	};
+	paint();
+
 	return h('section', { id: 'latest' },
-		h('h2', null, 'The last 7 days'),
+		h('h2', null, 'Activity'),
 		h('p', { class: 'sub' }, open ? 'What was playing, and for how long.' : 'Open an activity to see what was playing during it.'),
 		open
 			? opened(open, fmt)
 			: h('div', { class: 'pair' },
-				h('div', { class: 'card' }, h('h3', null, `Strava activities · ${activities.length}`), h('p', { class: 'sub' }, `Most recent first.${checked(me.strava)}`), list(activities, 'No activities in the last 7 days.')),
-				h('div', { class: 'card' }, h('h3', null, `Spotify songs · ${songs.length}`), h('p', { class: 'sub' }, `When each ended, and how long it played.${checked(me.spotify)}`), list(songs, me.spotify.connected ? 'No songs in the last 7 days. Play something and check back in a few minutes.' : 'Connect Spotify to see your songs here.')),
+				h('div', { class: 'card' }, h('div', { class: 'card-head' }, chips.strava, count, h('div', { class: 'filter-box' }, toggle, menu)), listed),
+				h('div', { class: 'card' },
+					h('div', { class: 'card-head' }, chips.spotify, h('span', { class: 'count' }, plural(recent.songs.length, 'song'))),
+					rows(recent.songs, song, me.spotify.connected ? 'No songs yet. Play something and check back in a few minutes.' : 'Connect Spotify to see your songs here.')),
 			),
+	);
+}
+
+/** Five records on a line: one for each run (or ride) with music, wearing a cover from it. The fifth unlocks the patterns. */
+function collecting(sport, have) {
+	const w = WORDS[sport];
+	const seconds = (a) => a.songs.reduce((sum, s) => sum + (s.to - s.from), 0);
+	// The ones that counted had music for at least half of them; those come first, fullest first, then they are put in order of date.
+	const share = (a) => seconds(a) / Math.max(1, a.elapsed_s);
+	const counted = state.recent.activities
+		.filter((a) => sportOf(a.type) === sport && a.songs.length)
+		.sort((a, b) => (share(b) >= 0.5) - (share(a) >= 0.5) || share(b) - share(a))
+		.slice(0, have)
+		.sort((a, b) => a.start_time - b.start_time);
+	const cover = (a) => a && [...a.songs].sort((x, y) => y.to - y.from - (x.to - x.from)).find((s) => s.image)?.image;
+	const left = RUNS_NEEDED - have;
+	const glyph = () => svg('svg', { class: 'glyph', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: GLYPHS[sport] }));
+
+	const discs = Array.from({ length: RUNS_NEEDED }, (_, i) => {
+		if (i < have) {
+			const src = cover(counted[i]);
+			return h('span', { class: 'disc on', title: counted[i]?.name || '' }, src ? h('img', { src, alt: '', referrerpolicy: 'no-referrer' }) : glyph(), h('i'));
+		}
+		const last = i === RUNS_NEEDED - 1;
+		return h('span', { class: `disc${i === have ? ' next' : ''}${last ? ' goal' : ''}` },
+			last ? svg('svg', { class: 'glyph', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: 'M12 2.5l2.2 6.3 6.3 2.2-6.3 2.2L12 19.5l-2.2-6.3L3.5 11l6.3-2.2z' })) : i === have ? glyph() : null);
+	});
+
+	return h('div', { class: 'card collect' },
+		h('div', { class: 'collect-text' },
+			h('strong', null, h('b', null, String(have)), ` of ${RUNS_NEEDED} ${w.many} with music`),
+			h('p', null, have ? `${left} more with Spotify on, and your song patterns appear.` : `${sport === 'ride' ? 'Ride' : 'Run'} with Spotify on. After ${RUNS_NEEDED}, your song patterns appear.`),
+		),
+		h('div', { class: 'discs', role: 'img', 'aria-label': `${have} of ${RUNS_NEEDED} ${w.many} with music` },
+			h('i', { class: 'line' }, h('i', { style: { width: `${(Math.min(have, RUNS_NEEDED - 1) / (RUNS_NEEDED - 1)) * 100}%` } })),
+			discs),
 	);
 }
 
@@ -707,7 +815,6 @@ function sportTabs() {
 		},
 			svg('svg', { class: 'glyph', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: GLYPHS[sport] })),
 			WORDS[sport].tab,
-			h('span', null, state.runs[sport].length),
 		)));
 }
 
@@ -717,22 +824,14 @@ function dashboard() {
 	const runs = state.runs[sport];
 	const w = WORDS[sport];
 	const fmt = formatter();
-	const page = h('div', { class: 'wrap' }, header(), statusBar(), notices(), sportTabs());
-
 	// Until there are enough runs (or rides) with music for the song cards to mean anything,
-	// the page shows what is being collected instead: the last 7 days.
+	// the page shows what is being collected instead: every activity and every song.
 	const have = ins.totals.runs_with_music;
+	const page = h('div', { class: 'wrap' }, header(), statusBar(have < RUNS_NEEDED && !state.recent.activities.some((a) => a.id === state.openActivity)), notices(), sportTabs());
+
 	if (have < RUNS_NEEDED) {
-		page.append(h('div', { class: 'card note collecting' },
-			h('p', null,
-				h('strong', null, `Collecting your ${w.many}: ${have} of ${RUNS_NEEDED}`),
-				`Your song patterns appear after ${RUNS_NEEDED} ${w.many} with music. Cadence can only match songs it sees from the day you connect, so just keep ${sport === 'ride' ? 'riding' : 'running'} with Spotify on.`),
-			h('i', { class: 'meter' }, h('i', { style: { width: `${(have / RUNS_NEEDED) * 100}%`, background: 'var(--pace)' } })),
-		));
+		page.append(collecting(sport, have));
 		page.append(latest(fmt));
-		if (runs.length) {
-			page.append(h('section', null, h('h2', null, w.Many), h('p', { class: 'sub' }, `Open a ${w.one} to see its ${w.rate} song by song.`), runsTable(runs, fmt, sport)));
-		}
 		page.append(footer());
 		return page;
 	}

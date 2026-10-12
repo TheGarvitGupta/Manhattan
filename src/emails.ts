@@ -9,6 +9,7 @@
 // Email is written for mail clients: tables and inline styles only.
 
 import { buildInsights } from './insights';
+import { songIntervals } from './match';
 import { RIDE_TYPES, Sport, SPORTS } from './providers';
 import { Env, now, recast, User } from './util';
 
@@ -83,6 +84,9 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const kind = (type: string) => (RUN_TYPES.includes(type) ? 'Run' : RIDE_TYPES.has(type) ? 'Ride' : type.replace(/([a-z])([A-Z])/g, '$1 $2'));
 const when = (ts: number, tz: string | null) =>
   new Date(ts * 1000).toLocaleString('en-US', { timeZone: tz || 'UTC', weekday: 'short', hour: 'numeric', minute: '2-digit' });
+// The runs and rides listed can be weeks apart, so they carry the date and not the weekday.
+const whenDated = (ts: number, tz: string | null) =>
+  new Date(ts * 1000).toLocaleString('en-US', { timeZone: tz || 'UTC', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 // --- building blocks -------------------------------------------------------------------
 
@@ -99,11 +103,11 @@ const cover = (image: string | null, name: string, size: number) =>
     : `<div style="width:${size}px;height:${size}px;border-radius:${Math.round(size / 5)}px;background:#eeede8;color:${MUTED};font:600 ${Math.round(size / 2.6)}px/${size}px ${FONT};text-align:center;">${esc((name || '?')[0])}</div>`;
 
 /** One row: a cover or a glyph tile, two lines of text, and a value on the right. */
-const row = (image: string | null, title: string, sub: string, value: string, detail = '', lead = cover(image, title, 44)) => `
+const row = (image: string | null, title: string, sub: string, value: string, detail = '', lead = cover(image, title, 44), below = '') => `
 <tr>
   <td width="44" style="padding:10px 12px 10px 0;border-top:1px solid ${LINE};">${lead}</td>
   <td style="padding:10px 0;border-top:1px solid ${LINE};font:15px/1.35 ${FONT};color:${INK};">
-    <b style="font-weight:600;">${esc(title)}</b><br><span style="color:${SOFT};font-size:13px;">${esc(sub)}</span>
+    <b style="font-weight:600;">${esc(title)}</b><br><span style="color:${SOFT};font-size:13px;">${esc(sub)}</span>${below}
   </td>
   <td align="right" style="padding:10px 0 10px 12px;border-top:1px solid ${LINE};font:15px/1.35 ${FONT};color:${INK};white-space:nowrap;">
     <b style="font-weight:600;">${esc(value)}</b>${detail ? `<br><span style="color:${MUTED};font-size:12px;">${esc(detail)}</span>` : ''}
@@ -298,16 +302,48 @@ async function weekly(env: Env, origin: string, user: EmailUser, unit: string, f
           .all<{ played_at: number; name: string; artist: string; image: string | null }>()
       ).results,
     );
+    // Only runs and rides are listed: they are what Cadence analyses.
+    const kinds = [...RUN_TYPES, ...RIDE_TYPES];
     const activities = (
       await env.DB.prepare(
-        `SELECT a.name, a.type, a.start_time, a.elapsed_s, a.distance_m,
-                (SELECT COUNT(*) FROM plays p WHERE p.user_id = a.user_id AND p.played_at > a.start_time
-                   AND p.played_at <= a.start_time + a.elapsed_s + 120) AS songs
-         FROM activities a WHERE a.user_id = ? ORDER BY a.start_time DESC LIMIT 10`,
+        `SELECT a.name, a.type, a.start_time, a.elapsed_s, a.distance_m
+         FROM activities a WHERE a.user_id = ? AND a.type IN (${kinds.map(() => '?').join(', ')}) ORDER BY a.start_time DESC LIMIT 10`,
       )
-        .bind(user.id)
-        .all<{ name: string; type: string; start_time: number; elapsed_s: number; distance_m: number; songs: number }>()
+        .bind(user.id, ...kinds)
+        .all<{ name: string; type: string; start_time: number; elapsed_s: number; distance_m: number }>()
     ).results;
+    // What played during each, for the covers under its name.
+    // A song counts when at least ten seconds of it fell inside the activity, as on the site.
+    const heard = new Map<number, { image: string | null }[]>();
+    for (const a of activities) {
+      const end = a.start_time + a.elapsed_s;
+      const plays = await recast(
+        env,
+        user,
+        (
+          await env.DB.prepare(
+            `SELECT p.played_at, p.track_id, t.duration_s, t.name, t.artist, t.image FROM plays p JOIN tracks t ON t.id = p.track_id
+             WHERE p.user_id = ? AND p.played_at > ? AND p.played_at <= ? ORDER BY p.played_at DESC LIMIT 200`,
+          )
+            .bind(user.id, a.start_time - 1800, end + 900)
+            .all<{ played_at: number; track_id: string; duration_s: number; name: string; artist: string; image: string | null }>()
+        ).results,
+      );
+      heard.set(
+        a.start_time,
+        a.elapsed_s > 0 ? songIntervals(plays).filter((i) => Math.min(i.to, end) - Math.max(i.from, a.start_time) >= 10).map((i) => i.play) : [],
+      );
+    }
+    /** An activity's songs: up to five small covers, then how many there were in a pill. */
+    const songsLine = (songs: { image: string | null }[]) => {
+      const pill = (text: string, bg: string, color: string) =>
+        `<span style="display:inline-block;vertical-align:middle;padding:1px 8px;border-radius:999px;background:${bg};color:${color};font:600 12px/18px ${FONT};">${text}</span>`;
+      if (!songs.length) return `<div style="margin-top:5px;">${pill('no songs', '#f1f0ee', MUTED)}</div>`;
+      const covers = [...new Set(songs.map((x) => x.image).filter((x): x is string => !!x))].slice(0, 5);
+      return `<div style="margin-top:5px;">${covers
+        .map((src) => `<img src="${esc(src)}" width="18" height="18" alt="" style="display:inline-block;vertical-align:middle;border:0;border-radius:5px;margin-right:3px;">`)
+        .join('')}${covers.length ? '<span style="display:inline-block;width:3px;"></span>' : ''}${pill(plural(songs.length, 'song'), '#e3f6ea', INK)}</div>`;
+    };
 
     // The count that leads is the sport nearest its number; the other is told in a line under it.
     const lead = order[0];
@@ -329,17 +365,17 @@ ${lede(esc(`Your fastest and slowest songs appear after ${RUNS_NEEDED}.${also}`)
 ${figures(weekTiles)}
 ${heading('Last 10 songs')}
 ${songs.length ? table(songs.map((s) => row(s.image, s.name, s.artist, when(s.played_at, user.email_tz))).join('')) : para('No songs yet. Play something on Spotify and it will show up here.')}
-${heading('Last 10 activities')}
+${heading('Last runs and rides')}
 ${
   activities.length
     ? table(
         activities
           .map((a) =>
-            row(null, a.name, `${kind(a.type)} · ${length(a.elapsed_s)}${a.distance_m ? ` · ${u.dist(a.distance_m)}` : ''}`, when(a.start_time, user.email_tz), a.songs ? plural(a.songs, 'song') : 'no songs', glyphTile(a.type, l.app)),
+            row(null, a.name, `${kind(a.type)} · ${length(a.elapsed_s)}${a.distance_m ? ` · ${u.dist(a.distance_m)}` : ''}`, whenDated(a.start_time, user.email_tz), '', glyphTile(a.type, l.app), songsLine(heard.get(a.start_time) ?? [])),
           )
           .join(''),
       )
-    : para('No activities yet.')
+    : para('No runs or rides yet.')
 }
 ${button(l.app, 'Open Cadence')}`;
     const subject = `Still collecting: ${have} of ${RUNS_NEEDED} ${w.many} with music`;
@@ -347,7 +383,7 @@ ${button(l.app, 'Open Cadence')}`;
       subject,
       preview: weekLine,
       html: shell(subject, hero, body, weekLine, footer, l.app),
-      text: `${subject}\n\n${weekLine}\n\nLast songs:\n${songs.map((s) => `- ${s.name} · ${s.artist}`).join('\n')}\n\nLast activities:\n${activities.map((a) => `- ${a.name} (${kind(a.type)})`).join('\n')}\n\nOpen Cadence: ${l.app}\nTurn these emails off: ${l.off}`,
+      text: `${subject}\n\n${weekLine}\n\nLast songs:\n${songs.map((s) => `- ${s.name} · ${s.artist}`).join('\n')}\n\nLast runs and rides:\n${activities.map((a) => `- ${a.name} (${kind(a.type)}, ${plural((heard.get(a.start_time) ?? []).length, 'song')})`).join('\n')}\n\nOpen Cadence: ${l.app}\nTurn these emails off: ${l.off}`,
     };
   }
 

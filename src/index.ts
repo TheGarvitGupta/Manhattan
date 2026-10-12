@@ -179,38 +179,38 @@ interface RecentActivity {
   run_id: number | null;
 }
 
-const RECENT_DAYS = 7;
+// The most plays and activities the Activity lists carry. Far more than anyone has yet.
+const PLAYS_SHOWN = 6000;
+const ACTIVITIES_SHOWN = 1000;
 
 /**
- * Every activity (of any type) and song from the last week. Each activity
+ * Every activity (of any type) and every song Cadence has seen. Each activity
  * comes with the songs that were playing during it, and for how long.
  */
 async function recent(env: Env, user: User) {
-  const since = now() - RECENT_DAYS * 86400;
   const activities = (
     await env.DB.prepare(
       `SELECT a.strava_id AS id, a.name, a.type, a.start_time, a.elapsed_s, a.distance_m,
               (SELECT id FROM runs WHERE user_id = a.user_id AND strava_id = a.strava_id AND stream_state = 'ok') AS run_id
-       FROM activities a WHERE a.user_id = ? AND a.start_time >= ? ORDER BY a.start_time DESC LIMIT 60`,
+       FROM activities a WHERE a.user_id = ? ORDER BY a.start_time DESC LIMIT ?`,
     )
-      .bind(user.id, since)
+      .bind(user.id, ACTIVITIES_SHOWN)
       .all<RecentActivity>()
   ).results;
 
-  const playsBetween = async (from: number, to: number, limit: number) =>
-    recast(
-      env,
-      user,
-      (
-        await env.DB.prepare(
-          `SELECT p.played_at, p.track_id, t.duration_s, t.name, t.artist, t.image
-           FROM plays p JOIN tracks t ON t.id = p.track_id
-           WHERE p.user_id = ? AND p.played_at > ? AND p.played_at <= ? ORDER BY p.played_at DESC LIMIT ?`,
-        )
-          .bind(user.id, from, to, limit)
-          .all<RecentPlay>()
-      ).results,
-    );
+  const plays = await recast(
+    env,
+    user,
+    (
+      await env.DB.prepare(
+        `SELECT p.played_at, p.track_id, t.duration_s, t.name, t.artist, t.image
+         FROM plays p JOIN tracks t ON t.id = p.track_id
+         WHERE p.user_id = ? ORDER BY p.played_at DESC LIMIT ?`,
+      )
+        .bind(user.id, PLAYS_SHOWN)
+        .all<RecentPlay>()
+    ).results,
+  );
   const describe = (i: SongInterval<RecentPlay>, from = i.from, to = i.to) => ({
     name: i.play.name,
     artist: i.play.artist,
@@ -220,24 +220,22 @@ async function recent(env: Env, user: User) {
     skipped: i.skipped,
   });
 
-  // An hour of earlier plays bounds the start of the oldest song shown.
-  const songs = songIntervals(await playsBetween(since - 3600, now() + 60, 1500))
-    .filter((i) => i.to >= since)
-    .reverse()
-    .map((i) => describe(i));
-
+  // Oldest first, so one pass can hand each activity the songs that overlap it.
+  const intervals = songIntervals(plays);
   const withSongs = [];
+  let first = intervals.length;
   for (const a of activities) {
+    // Activities come newest first, so the first song that could overlap only ever moves back.
     const end = a.start_time + a.elapsed_s;
-    const intervals = a.elapsed_s > 0 ? songIntervals(await playsBetween(a.start_time - 1800, end + 900, 200)) : [];
-    withSongs.push({
-      ...a,
-      songs: intervals
-        .filter((i) => Math.min(i.to, end) - Math.max(i.from, a.start_time) >= 10)
-        .map((i) => describe(i, Math.max(i.from, a.start_time), Math.min(i.to, end))),
-    });
+    while (first > 0 && intervals[first - 1].to > a.start_time) first--;
+    const songs = [];
+    for (let k = first; k < intervals.length && intervals[k].from < end; k++) {
+      const i = intervals[k];
+      if (Math.min(i.to, end) - Math.max(i.from, a.start_time) >= 10) songs.push(describe(i, Math.max(i.from, a.start_time), Math.min(i.to, end)));
+    }
+    withSongs.push({ ...a, songs });
   }
-  return { songs, activities: withSongs };
+  return { songs: intervals.reverse().map((i) => describe(i)), activities: withSongs };
 }
 
 async function handleStravaWebhook(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

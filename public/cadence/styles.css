@@ -18,6 +18,7 @@
 	--faster: var(--accent);
 	--slower: #e34948;
 	--power: #2a78d6;
+	--blue: #0a84ff;
 	--up: var(--accent);
 	--cadence: #eda100;
 	--strava: #fc4c02;
@@ -87,8 +88,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .sports button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 11px 14px; border: 0; border-radius: 10px; background: none; font-size: 15px; font-weight: 600; color: var(--ink-2); }
 .sports button:hover { background: var(--wash); }
 .sports button[aria-selected="true"] { background: var(--accent); color: #fff; }
-.sports button span { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--wash); color: var(--ink-2); }
-.sports button[aria-selected="true"] span { background: rgba(255, 255, 255, 0.22); color: #fff; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; background: none; padding: 5px 10px; font-size: 13px; color: var(--ink-2); }
 .seg button[aria-pressed="true"] { background: var(--wash); color: var(--ink); font-weight: 600; }
@@ -119,8 +118,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .ask summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .ask p { margin: 8px 0 10px; }
 .ask .inline { flex: none; }
-.collecting .meter { flex: 1 1 100%; height: 6px; border-radius: 3px; margin: 0; }
-.collecting .meter > i { border-radius: 3px; }
 
 section { margin-top: 52px; }
 section > h2 { font-size: 24px; letter-spacing: -0.02em; margin-bottom: 16px; }
@@ -271,18 +268,78 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .rows button.row { padding: 9px 6px; margin: 0 -6px; width: calc(100% + 12px); border-radius: 8px; }
 .rows button.row:hover { background: var(--wash); }
 .rows .who { flex: 1; min-width: 0; }
-.rows .who b, .rows .who span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rows .who b, .rows .who > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rows .who b { font-weight: 600; font-size: 14px; }
-.rows .who span, .rows .at { color: var(--ink-2); font-size: 13px; }
+.rows .who span, .rows .at, .rows .meta { color: var(--ink-2); font-size: 13px; }
 .rows .at { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rows .go { color: var(--muted); font-size: 18px; line-height: 1; }
 .rows .off .who b { font-weight: 500; }
+
+.rows .meta { display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.rows .meta + .meta { margin-top: 3px; padding: 2px 0; }
+.rows .meta b { flex: 1; min-width: 0; }
+.rows .meta > span { flex: none; }
+.rows .meta + .meta > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.heard { display: inline-flex; align-items: center; gap: 6px; }
+.covers { display: inline-flex; padding-left: 5px; }
+.covers img { width: 18px; height: 18px; margin-left: -5px; border-radius: 5px; object-fit: cover; background: var(--wash); box-shadow: 0 0 0 1.5px var(--surface); }
+.rows .who .pill, .pill { padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--spotify) 14%, transparent); color: var(--ink); font-size: 12px; font-weight: 600; }
+.rows .who .pill.none, .pill.none { background: var(--wash); color: var(--muted); font-weight: 500; }
+
+/* The head of an Activity card: whose list it is and when it was checked, how long it is, and the filter. */
+.card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 12px; font-size: 13px; }
+.card-head .count { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.filter-box { position: relative; margin-left: auto; }
+.filter { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--wash); color: var(--blue); }
+.filter svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.filter.on { background: var(--blue); color: #fff; }
+.pick { position: absolute; right: 0; top: 40px; z-index: 20; min-width: 200px; padding: 5px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 12px 34px rgba(0, 0, 0, 0.16), 0 0 0 1px var(--border); }
+.pick button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 9px; background: none; font-size: 15px; color: var(--ink); text-align: left; }
+.pick button:hover:not(:disabled) { background: var(--wash); }
+.pick button span { flex: 1; }
+.pick .glyph { color: var(--ink-2); }
+.pick .tick { width: 18px; height: 18px; fill: none; stroke: var(--blue); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; visibility: hidden; }
+.pick [aria-checked="true"] .tick { visibility: visible; }
+.pick .clear { margin-top: 5px; border-top: 1px solid var(--grid); border-radius: 0 0 9px 9px; color: var(--slower); }
+.pick .clear:disabled { color: var(--muted); }
+
+/* --- collecting: five records on a line, one for each run or ride with music ---- */
+
+.collect { display: flex; align-items: center; gap: 20px 40px; flex-wrap: wrap; margin: 14px 0 20px; padding: 26px 28px; }
+.collect-text { flex: 1 1 250px; }
+.collect-text strong { display: block; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.collect-text strong b { font-size: 44px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; margin-right: 6px; color: var(--accent); }
+.collect-text p { margin-top: 6px; color: var(--ink-2); font-size: 14px; }
+.discs { flex: 2 1 340px; position: relative; display: grid; grid-template-columns: repeat(5, 1fr); justify-items: center; align-items: center; }
+.discs .line { position: absolute; left: 10%; right: 10%; top: 50%; height: 3px; margin-top: -1.5px; border-radius: 2px; background: var(--grid); }
+.discs .line i { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+.disc { position: relative; width: 68px; height: 68px; display: grid; place-items: center; border-radius: 50%; background: var(--surface); border: 2px dashed var(--axis); color: var(--muted); }
+.disc .glyph { width: 24px; height: 24px; }
+.disc.next { border-color: var(--accent); color: var(--accent); animation: beckon 2.2s ease-in-out infinite; }
+.disc.goal { border-style: solid; }
+.disc.goal.next { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+/* A counted one is a record: grooves, the cover for its label, a hole through the middle. */
+.disc.on { border: 0; color: #fff; background: repeating-radial-gradient(circle, #1b1b1d 0 2px, #101011 2px 3.5px); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 6px 16px rgba(0, 0, 0, 0.2); animation: spin 9s linear infinite; }
+.disc.on img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+.disc.on i { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
+.disc.on .glyph { width: 36px; height: 36px; padding: 7px; border-radius: 50%; background: var(--accent); }
+.disc.on .glyph + i { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes beckon { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); } 60% { box-shadow: 0 0 0 10px transparent; } }
+@media (prefers-reduced-motion: reduce) { .disc { animation: none !important; } }
+@media (max-width: 520px) {
+	.collect { padding: 22px 18px; }
+	.disc { width: 52px; height: 52px; }
+	.disc.on img, .disc.on .glyph { width: 28px; height: 28px; }
+	.disc .glyph { width: 20px; height: 20px; }
+}
 
 .meter { grid-column: -3 / -1; position: relative; height: 4px; border-radius: 2px; background: var(--wash); margin-top: 4px; }
 .meter > i { display: block; height: 100%; border-radius: 2px; }
 
 /* --- status strip: connections and data range -------------------------------- */
 
+.status:empty { display: none; }
 .status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: -4px 0 20px; font-size: 13px; color: var(--ink-2); }
 .chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px 5px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .chip b { color: var(--ink); font-weight: 600; }

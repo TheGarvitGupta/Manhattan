@@ -322,7 +322,7 @@ function simulateRide(index: number): SimRun {
 // --- other activities ---------------------------------------------------------
 
 // A real account has more than runs and rides. These land in the past week so
-// the "last 7 days" view shows a gym session and a walk as well.
+// the Activity list shows a gym session and a walk as well.
 interface SimActivity {
   name: string;
   type: string;
@@ -417,13 +417,11 @@ for (const { run, sport, type, stravaId } of all) {
   for (const p of run.plays) {
     sql.push(`INSERT OR IGNORE INTO plays (user_id, played_at, track_id) VALUES (${USER}, ${p.played_at}, ${q(p.track_id)});`);
   }
-  // Recent ones also appear in the activity list, as they would for a real account.
-  if (run.start > NOW - 9 * 86400) {
-    sql.push(
-      `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m, elapsed_s, stream_state) VALUES ` +
-        `(${USER}, ${stravaId}, ${q(run.name)}, ${q(type)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.elapsed}, 'ok');`,
-    );
-  }
+  // Each also appears in the activity list, as it would for a real account.
+  sql.push(
+    `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m, elapsed_s, stream_state) VALUES ` +
+      `(${USER}, ${stravaId}, ${q(run.name)}, ${q(type)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.elapsed}, 'ok');`,
+  );
   const songs = matchSongs(run.start, run.streams, run.plays);
   songCount += songs.length;
   if (songs.length) {

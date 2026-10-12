@@ -111,13 +111,13 @@ Two emails, written in `src/emails.ts`, from `Cadence <no-reply@cadence.garvitgu
 - **Welcome**: once, when someone turns on email updates. It carries the
   "Confirm my email" button; nothing else is sent until they tap it.
 - **Sunday roundup**: 9am every Sunday in the reader's timezone. Their last 10
-  songs and activities while Cadence is still collecting, or the top findings
+  songs and last 10 runs and rides (each with its songs) while Cadence is still collecting, or the top findings
   once there are five runs with music. Biking joins the same email on the same
   terms: its findings appear once there are five rides with music, and until
   then the email says how many there are so far.
 
 Strava does not share an email address, so people enter one on the Emails
-page. The demo account's "Demo emails" button shows all three, filled in with
+page. The demo account's Emails page (in the account menu) shows all three, filled in with
 the demo runner's data.
 
 Emails go out through Resend (resend.com, free at this volume). Sending is off

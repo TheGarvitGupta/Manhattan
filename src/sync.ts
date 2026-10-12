@@ -78,7 +78,7 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
   for (const a of activities) {
     const type = a.sport_type ?? a.type;
     const start = Math.floor(Date.parse(a.start_date) / 1000);
-    // Every activity is noted for the "recent activity" list; runs and rides are kept in full.
+    // Every activity is noted for the Activity list; runs and rides are kept in full.
     stmts.push(
       env.DB.prepare(
         `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m, elapsed_s) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -100,7 +100,7 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
   stmts.push(
     env.DB.prepare(
       `DELETE FROM activities WHERE user_id = ?1 AND strava_id NOT IN
-         (SELECT strava_id FROM activities WHERE user_id = ?1 ORDER BY start_time DESC LIMIT 60)`,
+         (SELECT strava_id FROM activities WHERE user_id = ?1 ORDER BY start_time DESC LIMIT 1000)`,
     ).bind(userId),
   );
   if (stmts.length) await env.DB.batch(stmts);
@@ -225,7 +225,7 @@ export async function syncUser(env: Env, userId: number, budget: Budget, opts: S
 }
 
 /**
- * The demo account's data would age out of the "last 7 days" view, so once a
+ * The demo account's data would drift into the past, so once a
  * day it is slid forward by a whole number of days (keeping times of day).
  */
 async function refreshDemo(env: Env): Promise<void> {
