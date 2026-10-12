@@ -402,6 +402,37 @@ for (const t of tracks) {
   );
 }
 
+/**
+ * A made-up route for a run or ride: a wobbly loop of the right length, as the
+ * encoded polyline Strava sends. It has its own dice so the rest of the data is unchanged.
+ */
+function route(distance: number, seed: number): string {
+  let x = seed * 2654435761;
+  const dice = () => ((x = (Math.imul(x ^ (x >>> 15), 2246822507) ^ (x >>> 13)) | 0), ((x >>> 0) % 10000) / 10000);
+  const waves = [2, 3, 5].map((k) => ({ k, amp: 0.1 + dice() * 0.22, at: dice() * 2 * Math.PI }));
+  const radius = distance / (2 * Math.PI) / 1.15;
+  const turn = dice() * 2 * Math.PI;
+  const [lat0, lng0] = [37.7694 + (dice() - 0.5) * 0.02, -122.4862 + (dice() - 0.5) * 0.03];
+  let out = '';
+  let [pLat, pLng] = [0, 0];
+  const put = (v: number) => {
+    let n = v < 0 ? ~(v << 1) : v << 1;
+    while (n >= 0x20) (out += String.fromCharCode((0x20 | (n & 0x1f)) + 63)), (n >>= 5);
+    out += String.fromCharCode(n + 63);
+  };
+  const N = 90;
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * 2 * Math.PI;
+    const r = radius * (1 + waves.reduce((sum, w) => sum + w.amp * Math.sin(w.k * a + w.at), 0));
+    const lat = Math.round((lat0 + (r * Math.sin(a + turn)) / 111320) * 1e5);
+    const lng = Math.round((lng0 + (r * Math.cos(a + turn)) / (111320 * Math.cos((lat0 * Math.PI) / 180))) * 1e5);
+    put(lat - pLat);
+    put(lng - pLng);
+    [pLat, pLng] = [lat, lng];
+  }
+  return out;
+}
+
 let songCount = 0;
 const runs = Array.from({ length: RUNS }, (_, i) => simulateRun(i));
 for (const run of runs) busy.push([run.start, run.start + run.elapsed]);
@@ -419,8 +450,8 @@ for (const { run, sport, type, stravaId } of all) {
   }
   // Each also appears in the activity list, as it would for a real account.
   sql.push(
-    `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m, elapsed_s, stream_state) VALUES ` +
-      `(${USER}, ${stravaId}, ${q(run.name)}, ${q(type)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.elapsed}, 'ok');`,
+    `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m, elapsed_s, stream_state, polyline) VALUES ` +
+      `(${USER}, ${stravaId}, ${q(run.name)}, ${q(type)}, ${run.start}, ${run.distance.toFixed(1)}, ${run.elapsed}, 'ok', ${q(route(run.distance, -stravaId))});`,
   );
   const songs = matchSongs(run.start, run.streams, run.plays);
   songCount += songs.length;

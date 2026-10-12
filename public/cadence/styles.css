@@ -451,4 +451,17 @@ a.fact:hover .who b { text-decoration: underline; }
 }
 .table td.dim { white-space: nowrap; }
 
-.opened .tiles { margin-bottom: 12px; }
+/* An opened activity: its figures, and the outline of its route beside them where it has one. */
+.opened-top { margin-bottom: 12px; }
+.opened-top.mapped { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 12px; }
+.opened-top.mapped .tiles { grid-template-columns: 1fr 1fr; }
+.route { padding: 0; overflow: hidden; display: grid; background: color-mix(in srgb, var(--accent) 6%, var(--surface)); background-image: linear-gradient(var(--wash) 1px, transparent 1px), linear-gradient(90deg, var(--wash) 1px, transparent 1px); background-size: 24px 24px; }
+.route svg { width: 100%; height: 100%; min-height: 170px; }
+.route path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.route .under { stroke: var(--surface); stroke-width: 7; }
+.route .way { stroke: var(--strava); stroke-width: 3; }
+.route .start { fill: var(--strava); stroke: var(--surface); stroke-width: 2; }
+.route .end { fill: var(--surface); stroke: var(--strava); stroke-width: 2.5; }
+@media (max-width: 640px) {
+	.opened-top.mapped { grid-template-columns: 1fr; }
+}

@@ -81,10 +81,11 @@ async function syncStrava(env: Env, userId: number, budget: Budget): Promise<voi
     // Every activity is noted for the Activity list; runs and rides are kept in full.
     stmts.push(
       env.DB.prepare(
-        `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m, elapsed_s) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO activities (user_id, strava_id, name, type, start_time, distance_m, elapsed_s, polyline) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (user_id, strava_id) DO UPDATE SET
-           name = excluded.name, type = excluded.type, distance_m = excluded.distance_m, elapsed_s = excluded.elapsed_s`,
-      ).bind(userId, a.id, a.name, type, start, a.distance ?? 0, a.elapsed_time ?? 0),
+           name = excluded.name, type = excluded.type, distance_m = excluded.distance_m, elapsed_s = excluded.elapsed_s,
+           polyline = COALESCE(excluded.polyline, polyline)`,
+      ).bind(userId, a.id, a.name, type, start, a.distance ?? 0, a.elapsed_time ?? 0, a.map?.summary_polyline || null),
     );
     const sport = sportOf(type);
     if (sport && a.distance > 0 && start >= cutoff) {

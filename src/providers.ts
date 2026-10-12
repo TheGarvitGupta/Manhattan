@@ -157,6 +157,8 @@ export interface StravaActivity {
   moving_time: number;
   elapsed_time: number;
   average_heartrate?: number;
+  /** The route, where the activity was recorded outdoors. */
+  map?: { summary_polyline?: string | null };
 }
 
 /** The athlete's most recent activities of every type, newest first. */

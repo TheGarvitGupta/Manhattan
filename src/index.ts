@@ -379,15 +379,15 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   }
   const activityMatch = path.match(/^\/api\/activities\/(-?\d+)$/);
   if (activityMatch) {
-    // Per-second data for one activity; runs fall back to their own copy.
+    // Per-second data for one activity (runs fall back to their own copy), and its route where it has one.
     const row = await env.DB.prepare(
-      `SELECT COALESCE(
+      `SELECT (SELECT polyline FROM activities WHERE user_id = ?1 AND strava_id = ?2) AS polyline, COALESCE(
          (SELECT streams FROM activities WHERE user_id = ?1 AND strava_id = ?2),
          (SELECT streams FROM runs WHERE user_id = ?1 AND strava_id = ?2)) AS streams`,
     )
       .bind(user.id, Number(activityMatch[1]))
-      .first<{ streams: string | null }>();
-    return json({ streams: row?.streams ? JSON.parse(row.streams) : null });
+      .first<{ streams: string | null; polyline: string | null }>();
+    return json({ streams: row?.streams ? JSON.parse(row.streams) : null, polyline: row?.polyline ?? null });
   }
   const runMatch = path.match(/^\/api\/runs\/(\d+)$/);
   if (runMatch) {
