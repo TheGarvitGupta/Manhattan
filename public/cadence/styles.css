@@ -478,15 +478,9 @@ a.fact:hover .who b { text-decoration: underline; }
 .route .hit { fill: transparent; cursor: default; }
 .chart .lane { fill: var(--wash); }
 .chart .series.faint { stroke-width: 1.5; opacity: 0.45; }
-.chart .ring { fill: var(--surface); stroke-width: 2.5; }
-.chart .ring.up { stroke: var(--faster); }
-.chart .ring.down { stroke: var(--faster); }
-.chart .step { stroke-width: 4; stroke-linecap: round; }
-.chart .step.up, .ranked .swing .up { stroke: var(--faster); background: var(--faster); }
-.chart .step.down, .ranked .swing .down { stroke: var(--faster); background: var(--faster); }
-.chart text.stepv { font-weight: 700; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
-.chart text.stepv.up { fill: var(--faster); }
-.chart text.stepv.down { fill: var(--faster); }
+.chart .step { stroke: var(--faster); stroke-width: 4; stroke-linecap: round; }
+.chart text.stepv { fill: var(--faster); font-weight: 700; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.ranked .swing .up, .ranked .swing .down { background: var(--faster); }
 .opened h4 { margin: 26px 0 0; font-size: 16px; letter-spacing: -0.01em; }
 .opened h4 + .sub { color: var(--ink-2); font-size: 13px; margin: 2px 0 10px !important; }
 .ranked { list-style: none; margin: 0; padding: 0; }

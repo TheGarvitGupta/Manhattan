@@ -398,8 +398,7 @@ export function activityChart(container, act, fmt) {
 		// The first panel is the point of the page: pace (or speed) with each song's average laid over it. The rest are slim.
 		const lead = panels.length && panels[0].average != null ? panels[0] : null;
 		const panelGap = 34;
-		// With a lead panel the covers ride on it, so the lane of song blocks is only drawn when there is none.
-		let bottom = lead ? actY : songY + laneH;
+		let bottom = songY + laneH;
 		for (const m of panels) {
 			m.h = m === lead ? (width < 520 ? 170 : 230) : 44;
 			m.top = bottom + (m === lead ? 40 : panelGap);
@@ -417,9 +416,9 @@ export function activityChart(container, act, fmt) {
 
 		// The songs as a row of blocks, a 2px gap of surface between neighbours.
 		const W = width - L - R;
-		if (!lead) svg.append(s('rect', { class: 'lane', x: L, y: songY, width: W, height: laneH, rx: 8 }));
-		if (!lead && !songs.length) svg.append(s('text', { x: L + 12, y: songY + 23 }, 'No songs were captured during this activity.'));
-		for (const song of lead ? [] : songs) {
+		svg.append(s('rect', { class: 'lane', x: L, y: songY, width: W, height: laneH, rx: 8 }));
+		if (!songs.length) svg.append(s('text', { x: L + 12, y: songY + 23 }, 'No songs were captured during this activity.'));
+		for (const song of songs) {
 			const x0 = x(song.a);
 			const w = Math.max(3, x(song.b) - x0 - 2);
 			svg.append(s('rect', { class: 'songbar', x: x0, y: songY, width: w, height: laneH, rx: Math.min(8, w / 2) }));
@@ -442,7 +441,7 @@ export function activityChart(container, act, fmt) {
 				if (song.a > 2) changes.add(Math.round(song.a));
 				if (song.b < total - 2 && (i === songs.length - 1 || songs[i + 1].a - song.b > 5)) changes.add(Math.round(song.b));
 			});
-			for (const sec of changes) svg.append(s('line', { class: 'change', x1: x(sec), x2: x(sec), y1: lead ? lead.top : songY + laneH, y2: bottom }));
+			for (const sec of changes) svg.append(s('line', { class: 'change', x1: x(sec), x2: x(sec), y1: songY + laneH, y2: bottom }));
 		}
 
 		// One panel per measure, each with its own scale (never two scales on one plot).
@@ -460,24 +459,16 @@ export function activityChart(container, act, fmt) {
 			if (m === lead && songs.length) line.classList.add('faint');
 			svg.append(line);
 			if (m === lead) {
-				// Each song's own average, as a bold step over its stretch with its cover riding on it: higher is faster.
+				// Each song's own average, as a bold step over its stretch: higher is faster.
 				for (const song of songs) {
 					const avg = stretchStats(streams, song.a, song.b).speed;
 					if (!avg) continue;
-					const v = m.invert ? fmt.unitMeters / avg : (avg * 3600) / fmt.unitMeters;
-					const faster = m.invert ? v < m.average : v > m.average;
+					const v = fmt.unitMeters / avg;
+					const faster = v < m.average;
 					const [x0, x1, y] = [x(song.a) + 1, x(song.b) - 3, m.y(v)];
 					if (x1 - x0 < 3) continue;
-					svg.append(s('line', { class: `step ${faster ? 'up' : 'down'}`, x1: x0, x2: x1, y1: y, y2: y }));
-					const size = Math.min(34, x1 - x0 - 2);
-					const mid = (x0 + x1) / 2;
-					if (song.image && size >= 14) {
-						const img = s('image', { href: song.image, x: mid - size / 2, y: y - size / 2, width: size, height: size, preserveAspectRatio: 'xMidYMid slice' });
-						img.style.clipPath = `inset(0 round ${Math.round(size / 4)}px)`;
-						svg.append(s('rect', { class: `ring ${faster ? 'up' : 'down'}`, x: mid - size / 2 - 2.5, y: y - size / 2 - 2.5, width: size + 5, height: size + 5, rx: Math.round(size / 4) + 2.5 }), img);
-					}
-					const half = song.image && size >= 14 ? size / 2 + 4 : 5;
-					if (x1 - x0 >= 40) svg.append(s('text', { class: `stepv ${faster ? 'up' : 'down'}`, x: mid, y: faster ? y - half - 4 : y + half + 14, 'text-anchor': 'middle' }, m.tip(v)[0]));
+					svg.append(s('line', { class: 'step', x1: x0, x2: x1, y1: y, y2: y }));
+					if (x1 - x0 >= 40) svg.append(s('text', { class: 'stepv', x: (x0 + x1) / 2, y: faster ? y - 8 : y + 17, 'text-anchor': 'middle' }, m.tip(v)[0]));
 				}
 			}
 			if (m.average != null && m.average >= m.lo && m.average <= m.hi) {
