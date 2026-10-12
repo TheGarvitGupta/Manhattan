@@ -706,9 +706,6 @@ function songsPill(songs) {
 // Each activity opens at its own address (#/activity/<id>), so the browser's back and forward buttons work.
 // `cameFrom` is where the page was scrolled to when one was opened, to go back to.
 let cameFrom = 0;
-let openedHere = false;
-// Back retraces the step when the activity was opened from the list; a link straight to one goes to the front page.
-const closeActivity = () => (openedHere ? history.back() : (location.hash = '#/'));
 
 // The filter's menu closes when anything else is pressed.
 let closeFilter = null;
@@ -726,7 +723,7 @@ function latest(fmt) {
 	const open = recent.activities.find((a) => a.id === state.openActivity);
 
 	const activity = (a) =>
-		h('li', null, h('button', { class: `row${sportOf(a.type) ? '' : ' off'}`, onclick: () => ((cameFrom = scrollY), (openedHere = true), (location.hash = `#/activity/${a.id}`)) },
+		h('li', null, h('button', { class: `row${sportOf(a.type) ? '' : ' off'}`, onclick: () => ((cameFrom = scrollY), (location.hash = `#/activity/${a.id}`)) },
 			glyphTile(a.type),
 			h('div', { class: 'who' },
 				h('div', { class: 'meta' }, h('b', null, a.name), h('span', { class: 'at' }, `${dayName(a.start_time)}, ${clockTime(a.start_time)}`)),
@@ -857,7 +854,7 @@ function dashboard() {
 	// how many there are so far. Every activity and every song is listed under either.
 	const have = ins.totals.runs_with_music;
 	// An opened activity has the page to itself.
-	if (state.recent.activities.some((a) => a.id === state.openActivity)) return h('div', { class: 'wrap' }, header(), h('button', { class: 'back', onclick: closeActivity }, '← Back'), latest(fmt), footer());
+	if (state.recent.activities.some((a) => a.id === state.openActivity)) return h('div', { class: 'wrap' }, header(), latest(fmt), footer());
 	const page = h('div', { class: 'wrap' }, header(), statusBar(true), notices(), sportTabs());
 	if (have < RUNS_NEEDED) page.append(collecting(sport, have));
 	else page.append(...story(ins, fmt, sport));
