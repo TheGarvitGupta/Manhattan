@@ -343,11 +343,13 @@ export async function hasPatterns(env: Env, user: User): Promise<boolean> {
   return (await buildInsights(env, user)).fastest.length > 0;
 }
 
-export function buildEmail(env: Env, origin: string, user: EmailUser, which: Kind, opts: { unit?: string; variant?: Variant } = {}): Promise<Email> {
+export async function buildEmail(env: Env, origin: string, user: EmailUser, which: Kind, opts: { unit?: string; variant?: Variant } = {}): Promise<Email> {
   // A preview can ask for a unit; otherwise the person's Strava setting decides.
   const own = user.units === 'mi' || user.units === 'km' ? user.units : user.email_units === 'mi' ? 'mi' : 'km';
   const unit = opts.unit === 'mi' || opts.unit === 'km' ? opts.unit : own;
-  return which === 'welcome' ? welcome(env, origin, user) : weekly(env, origin, user, unit, opts.variant);
+  const email = await (which === 'welcome' ? welcome(env, origin, user) : weekly(env, origin, user, unit, opts.variant));
+  // Covers are stored as Spotify's 64px thumbnails; the 300px picture of the same cover stays sharp on a phone's screen.
+  return { ...email, html: email.html.replaceAll('/image/ab67616d00004851', '/image/ab67616d00001e02') };
 }
 
 // --- sending --------------------------------------------------------------------------------
