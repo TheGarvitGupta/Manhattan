@@ -639,7 +639,7 @@ function loadMapbox(token) {
 }
 
 /**
- * The route on a map that can be dragged, zoomed, tilted and switched between
+ * The route on a map that can be dragged, zoomed and switched between
  * street, satellite and hybrid. The songs are laid along it as on the still
  * map below, which is what is drawn if Mapbox cannot be.
  */
@@ -706,14 +706,14 @@ function routeLive(gl, container, polyline, act, streams, fmt) {
 		bounds: [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
 		// Room at the top for the buttons that sit over the map.
 		fitBoundsOptions: { padding: holder.clientWidth < 520 ? { top: 70, bottom: 34, left: 34, right: 56 } : { top: 70, bottom: 50, left: 60, right: 70 } },
-		// Scrolling the page past the map must not zoom it: zooming takes ctrl or two fingers.
-		cooperativeGestures: true,
+		// Scrolling the page past the map never zooms it; the buttons do. On a touch screen one finger scrolls the page and two move the map.
+		scrollZoom: false,
+		cooperativeGestures: matchMedia('(pointer: coarse)').matches,
 	});
-	map.addControl(new gl.NavigationControl({ visualizePitch: true }), 'top-right');
+	map.addControl(new gl.NavigationControl(), 'top-right');
 	map.addControl(new gl.FullscreenControl(), 'top-right');
 
 	// Sources and layers go with the style, so they are laid again each time the style is changed.
-	let tilted = false;
 	const lay = () => {
 		if (map.getSource('road')) return;
 		// The pale style is all grey and faint as it comes. It is given Strava's look: warm grey land under white
@@ -740,8 +740,6 @@ function routeLive(gl, container, polyline, act, streams, fmt) {
 		map.addLayer({ id: 'road', type: 'line', source: 'road', layout: round, paint: { 'line-color': '#3a3a3a', 'line-width': 2, 'line-dasharray': [0.5, 2.5] } });
 		map.addLayer({ id: 'songs-case', type: 'line', source: 'songs', layout: round, paint: { 'line-color': '#fff', 'line-width': 11 } });
 		map.addLayer({ id: 'songs', type: 'line', source: 'songs', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': 6.5 } });
-		if (!map.getSource('heights')) map.addSource('heights', { type: 'raster-dem', url: 'mapbox://mapbox.mapbox-terrain-dem-v1', tileSize: 512, maxzoom: 14 });
-		map.setTerrain(tilted ? { source: 'heights', exaggeration: 1.4 } : null);
 	};
 	map.on('style.load', lay);
 
@@ -776,7 +774,7 @@ function routeLive(gl, container, polyline, act, streams, fmt) {
 		if (source) source.setData({ type: 'FeatureCollection', features: songs.map((q) => line(stretch(q.from + length * 0.002, q.to - length * 0.002), { color: q.color })) });
 	});
 
-	// Which map, and whether it is tilted with the hills raised.
+	// Which map.
 	const kinds = MAP_STYLES.map(([label, style], i) =>
 		h('button', {
 			'aria-pressed': String(i === 0),
@@ -785,16 +783,7 @@ function routeLive(gl, container, polyline, act, streams, fmt) {
 				map.setStyle(style);
 			},
 		}, label));
-	const tilt = h('button', {
-		class: 'tilt', 'aria-pressed': 'false', title: 'Tilt the map and raise the hills',
-		onclick: () => {
-			tilted = !tilted;
-			tilt.setAttribute('aria-pressed', String(tilted));
-			map.setTerrain(tilted ? { source: 'heights', exaggeration: 1.4 } : null);
-			map.easeTo({ pitch: tilted ? 62 : 0, bearing: tilted ? -20 : 0, duration: 900 });
-		},
-	}, '3D');
-	holder.append(h('div', { class: 'map-ui' }, h('div', { class: 'seg', role: 'group', 'aria-label': 'Map style' }, kinds), tilt));
+	holder.append(h('div', { class: 'map-ui' }, h('div', { class: 'seg', role: 'group', 'aria-label': 'Map style' }, kinds)));
 
 	// The map holds a graphics context; it is given back once the page has moved on.
 	const watch = setInterval(() => {
