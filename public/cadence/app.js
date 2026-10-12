@@ -174,7 +174,10 @@ function landing() {
 	// The words stand on a moving picture: a runner crossing a playlist, the run kept to the room left for it under them.
 	const room = h('div', { class: 'hero-run' });
 	const hero = h('div', { class: 'hero' },
+		h('div', { class: 'hero-top' }, header()),
 		h('div', { class: 'hero-copy' },
+			error && h('div', { class: 'card note error' }, h('p', null, error)),
+			emailNotice(),
 			h('div', { class: 'joined' }, logo('strava'), 'Strava', h('i', null, '+'), logo('spotify'), 'Spotify'),
 			h('h1', null, 'Which songs make you run faster?'),
 			h('p', { class: 'lede' }, 'Your pace, song by song.'),
@@ -188,12 +191,10 @@ function landing() {
 	// Real covers for the songs underfoot, a different handful each visit.
 	scene(hero, { room, units: () => state.units, covers: api('api/covers').then((r) => r.covers).catch(() => []) });
 
-	return h('div', { class: 'wrap' },
-		header(),
-		h('main', { class: 'landing' },
-			error && h('div', { class: 'card note error' }, h('p', null, error)),
-			emailNotice(),
-			hero,
+	// The picture fills the screen, edge to edge; the three steps and the small print are just below it.
+	return h('main', { class: 'landing' },
+		hero,
+		h('div', { class: 'wrap' },
 			h('div', { class: 'steps' },
 				step(logo('strava'), 'Connect Strava'),
 				h('i', { 'aria-hidden': 'true' }, '→'),

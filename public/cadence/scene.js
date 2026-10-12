@@ -12,8 +12,8 @@ export function scene(host, opts) {
 	cv.setAttribute("aria-hidden", "true");
 	host.prepend(cv);
 
-	var BASE = 696, TALL = 378;   // drawn as if the run were this tall, on a strip at least this wide, and scaled to fit
-	var BW = BASE;                // how wide the strip is, in those units: wider on a wide page
+	var TALL = 378;              // drawn as if the run were this tall, and scaled to fit the room it is given
+	var BW = 696;                // how wide the strip then is, in those units: wider on a wide page
 	var RX = 286;                 // where the runner is, across
 	var LEAN = Math.tan(11 * Math.PI / 180);   // the logo's bars lean this far
 	var YELLOW = "#ffd24a", WHITE = "#fcfcfb";
@@ -105,7 +105,8 @@ export function scene(host, opts) {
 		if (!r.width || !room) return;
 		dpr = Math.min(window.devicePixelRatio || 1, 2);
 		cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
-		k = Math.min(r.width / BASE, room / TALL); BW = r.width / k; VH = r.height / k;
+		// as large as the room under the words allows, down to a strip 380 across: on a phone held upright the runner stays big and fewer bars show
+		k = Math.min(room / TALL, r.width / 380, 2.2); BW = r.width / k; VH = r.height / k;
 		RX = Math.round(BW * 0.42);
 	}
 
@@ -231,6 +232,7 @@ export function scene(host, opts) {
 	}
 
 	function draw() {
+		now.gy = gyAt(RX);   // afresh, in case the page has changed size since the last step
 		var v = now.v, hot = now.hot, pulse = now.pulse, song = now.song, gyR = now.gy, sp = scroll(v), j, sx, wx;
 		ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
 
