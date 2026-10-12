@@ -152,10 +152,6 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 .demo-link .chevron { width: 14px; height: 14px; }
 .hero .card { margin-bottom: 18px; color: var(--ink); }
 .hero-run { flex: 1; min-height: clamp(240px, 34vh, 400px); }
-/* Strava + Spotify, tucked into the corner */
-.hero > .joined { position: absolute; left: 20px; bottom: 20px; color: var(--ink); border-color: transparent; }
-/* on a phone the songs' dock has the middle of the foot, so the pair sits under it, centred (scene.js is told to leave the room) */
-@media (max-width: 640px) { .hero > .joined { left: 50%; bottom: 12px; transform: translateX(-50%); white-space: nowrap; } }
 @media (prefers-reduced-motion: reduce) { .start, .chevron { transition: none; } .hero-brand:hover .wordmark span { animation: none; } }
 .steps { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 26px; color: var(--ink-2); font-size: 14px; font-weight: 500; }
 .steps > i { font-style: normal; color: var(--muted); }

@@ -191,10 +191,9 @@ function landing() {
 			),
 		),
 		room,
-		h('div', { class: 'joined' }, logo('strava'), 'Strava', h('i', null, '+'), logo('spotify'), 'Spotify'),
 	);
 	// Real covers for the songs underfoot, a different handful each visit.
-	scene(hero, { room, units: () => state.units, foot: () => (matchMedia('(max-width: 640px)').matches ? 48 : 0), covers: api('api/covers').then((r) => r.covers).catch(() => []) });
+	scene(hero, { room, units: () => state.units, covers: api('api/covers').then((r) => r.covers).catch(() => []) });
 
 	// The picture fills the screen, edge to edge; the three steps and the small print are just below it.
 	return h('main', { class: 'landing' },
