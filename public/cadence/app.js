@@ -646,7 +646,10 @@ function opened(act, fmt) {
 
 	const card = h('div', { class: 'card opened' },
 		h('div', { class: 'opened-head' },
-			glyphTile(act.type),
+			// Whose activity it is, with what kind it was tucked into the corner of their photo.
+			state.me.user.avatar
+				? h('span', { class: 'by' }, h('img', { src: state.me.user.avatar, alt: '', referrerpolicy: 'no-referrer' }), glyphTile(act.type))
+				: glyphTile(act.type),
 			h('div', { class: 'grow' },
 				h('h3', null, act.name),
 				h('p', { class: 'sub' }, `${dayName(act.start_time)}, ${clockTime(act.start_time)} – ${clockTime(act.start_time + act.elapsed_s)}`),
