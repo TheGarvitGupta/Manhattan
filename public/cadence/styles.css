@@ -277,7 +277,7 @@ section > .sub { color: var(--ink-2); margin: 2px 0 14px; }
 
 .rows .meta { display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; }
 .rows .meta + .meta { margin-top: 3px; padding: 2px 0; }
-.rows .meta b { flex: 1; min-width: 0; }
+.rows .meta b { flex: 1; min-width: 0; color: var(--ink); }
 .rows .meta > span { flex: none; }
 .rows .meta + .meta > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .heard { display: inline-flex; align-items: center; gap: 6px; }

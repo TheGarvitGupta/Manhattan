@@ -4,7 +4,7 @@ import { scene } from './scene.js';
 
 const app = document.getElementById('app');
 // Running and biking are analysed apart: `insights` and `runs` each hold one of each ({ run, ride }), and `sport` is the tab that is open.
-const state = { me: null, insights: null, runs: null, recent: null, sport: 'run', sportChosen: false, units: 'km', allRuns: false, openActivity: null, filter: new Set(), filterFor: null, emailScenario: 'patterns' };
+const state = { me: null, insights: null, runs: null, recent: null, sport: 'run', sportChosen: false, units: 'km', openActivity: null, filter: new Set(), filterFor: null, emailScenario: 'patterns' };
 
 // Units: what the person picks here, else their Strava setting when Strava
 // shares it, else whatever the rest of garvitgupta.com is showing them: its
@@ -546,27 +546,6 @@ function story(ins, fmt, sport) {
 	return out.filter(Boolean);
 }
 
-const RUNS_SHOWN = 10;
-
-function runsTable(all, fmt, sport) {
-	const w = WORDS[sport];
-	const runs = state.allRuns ? all : all.slice(0, RUNS_SHOWN);
-	return h('div', { class: 'card' }, h('div', { class: 'scroll' },
-		h('table', { class: 'table' },
-			h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, w.one[0].toUpperCase() + w.one.slice(1)), h('th', { class: 'n' }, 'Distance'), h('th', { class: 'n' }, w.Rate), h('th', { class: 'n hide-s' }, 'Songs'))),
-			h('tbody', null, runs.map((r) =>
-				h('tr', { class: 'go', tabindex: '0', onclick: () => (location.hash = `#/run/${r.id}`), onkeydown: (e) => e.key === 'Enter' && (location.hash = `#/run/${r.id}`) },
-					h('td', { class: 'dim' }, day(r.start_time)),
-					h('td', null, r.name),
-					h('td', { class: 'n' }, fmt.dist(r.distance_m)),
-					h('td', { class: 'n' }, fmt.rate(r.distance_m / r.moving_s, sport)),
-					h('td', { class: 'n hide-s' }, r.songs || h('span', { class: 'dim' }, '–')),
-				),
-			)),
-		),
-	), all.length > runs.length && h('button', { class: 'btn more', onclick: () => ((state.allRuns = true), render(true)) }, `Show all ${all.length} ${w.many}`));
-}
-
 const words = (type) => type.replace(/([a-z])([A-Z])/g, '$1 $2');
 
 const clockTime = (ts) => new Date(ts * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -816,7 +795,6 @@ function sportTabs() {
 			onclick: () => {
 				state.sport = sport;
 				state.sportChosen = true;
-				state.allRuns = false;
 				render(true);
 			},
 		},
@@ -828,29 +806,14 @@ function sportTabs() {
 function dashboard() {
 	const { sport } = state;
 	const ins = state.insights[sport];
-	const runs = state.runs[sport];
-	const w = WORDS[sport];
 	const fmt = formatter();
-	// Until there are enough runs (or rides) with music for the song cards to mean anything,
-	// the page shows what is being collected instead: every activity and every song.
+	// Until there are enough runs (or rides) with music for the song cards to mean anything, the page shows
+	// how many there are so far. Every activity and every song is listed under either.
 	const have = ins.totals.runs_with_music;
-	const page = h('div', { class: 'wrap' }, header(), statusBar(have < RUNS_NEEDED && !state.recent.activities.some((a) => a.id === state.openActivity)), notices(), sportTabs());
-
-	if (have < RUNS_NEEDED) {
-		page.append(collecting(sport, have));
-		page.append(latest(fmt));
-		page.append(footer());
-		return page;
-	}
-
-	page.append(...story(ins, fmt, sport));
-
-	page.append(h('section', null,
-		h('h2', null, `Every ${w.one}`),
-		h('p', { class: 'sub' }, `Open one to see your ${w.rate} song by song.`),
-		runsTable(runs, fmt, sport),
-	));
-	page.append(footer());
+	const page = h('div', { class: 'wrap' }, header(), statusBar(!state.recent.activities.some((a) => a.id === state.openActivity)), notices(), sportTabs());
+	if (have < RUNS_NEEDED) page.append(collecting(sport, have));
+	else page.append(...story(ins, fmt, sport));
+	page.append(latest(fmt), footer());
 	return page;
 }
 
