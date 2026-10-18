@@ -94,10 +94,33 @@ async function spotifyCallback(req: Request, env: Env, user: User, ctx: Executio
   return redirect(`${env.BASE_PATH}/`, [setCookie(req, env, STATE_COOKIE, '', 0)]);
 }
 
-/** The app's owner is whoever set it up: the first real account with an email on it. Only they see the emails' previews. */
-async function ownerId(env: Env): Promise<number | null> {
-  const owner = await env.DB.prepare(`SELECT id FROM users WHERE is_demo = 0 AND email IS NOT NULL ORDER BY id LIMIT 1`).first<{ id: number }>();
-  return owner?.id ?? null;
+/** The app's owner, named by Strava athlete id in wrangler.jsonc. Only they see the admin page. */
+const isOwner = (env: Env, user: User) => !user.is_demo && !!env.OWNER_STRAVA_ID && String(user.strava_athlete_id) === env.OWNER_STRAVA_ID;
+
+/** Everyone who has signed in, with what they have connected, which emails they get, and how much Cadence holds for them. */
+async function admin(env: Env) {
+  const users = await env.DB.prepare(
+    `SELECT u.id, u.strava_athlete_id, u.name, u.avatar, u.created_at, u.last_sync_at, u.units,
+            u.email, u.email_confirmed_at, u.email_weekly, u.activity_emails, u.welcome_sent_at, u.weekly_sent_at,
+            (SELECT MAX(emailed_at) FROM runs WHERE user_id = u.id) AS activity_sent_at,
+            st.status AS strava_status, st.last_sync_at AS strava_synced, st.last_error AS strava_error,
+            sp.status AS spotify_status, sp.last_sync_at AS spotify_synced, sp.last_error AS spotify_error,
+            (SELECT COUNT(*) FROM runs WHERE user_id = u.id AND sport = 'run') AS runs,
+            (SELECT COUNT(*) FROM runs WHERE user_id = u.id AND sport = 'ride') AS rides,
+            (SELECT COUNT(*) FROM runs r WHERE r.user_id = u.id AND EXISTS (SELECT 1 FROM run_songs WHERE run_id = r.id)) AS with_music,
+            (SELECT COUNT(*) FROM plays WHERE user_id = u.id) AS plays,
+            (SELECT MAX(start_time) FROM activities WHERE user_id = u.id) AS last_activity,
+            (SELECT MAX(expires_at) FROM sessions WHERE user_id = u.id) AS session_until
+     FROM users u
+     LEFT JOIN tokens st ON st.user_id = u.id AND st.provider = 'strava'
+     LEFT JOIN tokens sp ON sp.user_id = u.id AND sp.provider = 'spotify'
+     WHERE u.is_demo = 0 ORDER BY u.created_at DESC`,
+  ).all();
+  const requests = await env.DB.prepare(
+    `SELECT a.id, a.user_id, u.name, a.spotify_email, a.message, a.created_at FROM access_requests a JOIN users u ON u.id = a.user_id
+     ORDER BY a.created_at DESC LIMIT 50`,
+  ).all();
+  return { users: users.results, requests: requests.results, session_ttl: SESSION_TTL };
 }
 
 async function me(env: Env, user: User) {
@@ -137,7 +160,7 @@ async function me(env: Env, user: User) {
     since: since?.t ?? null,
     mapbox: env.MAPBOX_TOKEN ?? null,
     // The owner sees what every email looks like; everyone else only their own settings.
-    owner: !user.is_demo && (await ownerId(env)) === user.id,
+    owner: isOwner(env, user),
     // Whether they have already asked the owner to be added to Spotify.
     access_requested: !!asked,
     email: {
@@ -371,11 +394,12 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (path === '/api/insights') return json(await buildInsights(env, user, sport));
   if (path === '/api/runs') return json(await listRuns(env, user, sport));
   if (path === '/api/recent') return json(await recent(env, user));
+  if (path === '/api/admin' && method === 'GET') return isOwner(env, user) ? json(await admin(env)) : json({ error: 'not found' }, 404);
 
   // Previews of the emails, built from this account's own data.
   const emailMatch = path.match(/^\/api\/emails\/(welcome|weekly|activity)(\/html)?$/);
   if (emailMatch && method === 'GET') {
-    if (user.is_demo || (await ownerId(env)) !== user.id) return json({ error: 'not found' }, 404);
+    if (!isOwner(env, user)) return json({ error: 'not found' }, 404);
     const variant = url.searchParams.get('variant');
     // Times in a preview follow the viewer's own timezone.
     let viewer = { ...(user as EmailUser), email_tz: (user as EmailUser).email_tz ?? url.searchParams.get('tz') };
@@ -442,8 +466,8 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     await env.DB.prepare(`INSERT INTO access_requests (user_id, spotify_email, message, created_at) VALUES (?, ?, ?, ?)`)
       .bind(user.id, address, message || null, now())
       .run();
-    const owner = await env.DB.prepare(`SELECT email FROM users WHERE id = ?`).bind(await ownerId(env)).first<{ email: string }>();
-    if (owner) await send(env, owner.email, accessRequestEmail(env, url.origin, user, address, message), undefined, address).catch(console.error);
+    const owner = await env.DB.prepare(`SELECT email FROM users WHERE strava_athlete_id = ? AND is_demo = 0`).bind(Number(env.OWNER_STRAVA_ID ?? 0)).first<{ email: string | null }>();
+    if (owner?.email) await send(env, owner.email, accessRequestEmail(env, url.origin, user, address, message), undefined, address).catch(console.error);
     return json({ ok: true });
   }
 

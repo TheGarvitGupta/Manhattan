@@ -558,3 +558,29 @@ a.fact:hover .who b { text-decoration: underline; }
 	.opened .opened-head > .glyph-tile { display: none; }
 	.opened .by { width: 48px; height: 48px; }
 }
+
+/* The owner's admin page. */
+h2.section { font-size: 20px; letter-spacing: -0.02em; margin: 36px 0 12px; }
+h2.section + .when { margin-top: -6px; margin-bottom: 14px; }
+.admin-tiles { margin-top: 18px; }
+.card.flush { padding: 0; }
+.card.flush.scroll { margin: 0; }
+.table.admin { min-width: 760px; }
+.table.admin th { padding: 12px 14px 8px; }
+.table.admin td { padding: 12px 14px; vertical-align: top; }
+.table.admin .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.table.admin .sub a { color: inherit; }
+.table.admin .addr { font-weight: 500; overflow-wrap: anywhere; }
+.person { display: flex; gap: 10px; align-items: center; }
+.person .avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: var(--wash); flex: none; display: block; }
+.person b { font-weight: 600; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 18px; background: var(--wash); color: var(--ink-2); white-space: nowrap; }
+.tag.ok { background: rgba(29, 185, 84, 0.14); color: #138a3d; }
+.tag.warn { background: rgba(237, 161, 0, 0.16); color: #9a6a00; }
+.tag.bad { background: rgba(227, 73, 72, 0.13); color: #c23534; }
+@media (prefers-color-scheme: dark) {
+	.tag.ok { color: #4ad27b; }
+	.tag.warn { color: #f0b93a; }
+	.tag.bad { color: #f07a7a; }
+}

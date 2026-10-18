@@ -15,6 +15,8 @@ export interface Env {
   MAPBOX_TOKEN?: string;
   // Where emails link back to; the cron has no request to read it from.
   PUBLIC_ORIGIN?: string;
+  // The owner's Strava athlete id. Only they see the admin page.
+  OWNER_STRAVA_ID?: string;
 }
 
 export interface User {

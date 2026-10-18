@@ -127,10 +127,18 @@ from `Cadence <no-reply@cadence.garvitgupta.com>`:
   then the email says how many there are so far.
 
 Turning emails off (on the Emails page, or from a link in any email) keeps the
-address. Everyone's Emails page holds their address and how often. The owner's
-(the first real account to give an address) also shows each email filled in
-with their own data (or the demo runner's, until there is some), and when each
-was last sent. Nobody else, the demo included, can see the previews.
+address. Everyone's Emails page holds their address and the two switches.
+
+## Admin
+
+The owner, named by Strava athlete id as `OWNER_STRAVA_ID` in `wrangler.jsonc`,
+gets an Admin page in the account menu (`#/admin`): everyone who has signed in,
+whether Strava and Spotify are connected (and any sync error), their email
+address and which emails they get and when each last went out, how many runs,
+rides and songs Cadence holds for them, and who has asked for Spotify access.
+Below that is every email, filled in with the owner's own data (or the demo
+runner's, until there is some). The page and its data (`/api/admin`,
+`/api/emails/*`) answer no one else. Access requests are emailed to the owner.
 
 Emails go out through Resend (resend.com, free at this volume). Sending is off
 until it is set up:

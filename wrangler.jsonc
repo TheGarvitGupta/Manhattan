@@ -29,6 +29,8 @@
     "PUBLIC_ORIGIN": "https://www.garvitgupta.com",
     "STRAVA_CLIENT_ID": "38171",
     "SPOTIFY_CLIENT_ID": "8bff943da02b4f409395f371441b3990",
+    // The owner's Strava athlete id: only they see the admin page, and access requests go to them.
+    "OWNER_STRAVA_ID": "42935773",
     // How often the cron polls Strava per user. Raise to 360 once the webhook is set up.
     "STRAVA_POLL_MINUTES": "30"
   },

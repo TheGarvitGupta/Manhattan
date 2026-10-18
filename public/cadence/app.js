@@ -4,7 +4,7 @@ import { scene } from './scene.js';
 
 const app = document.getElementById('app');
 // Running and biking are analysed apart: `insights` and `runs` each hold one of each ({ run, ride }), and `sport` is the tab that is open.
-const state = { me: null, insights: null, runs: null, recent: null, sport: 'run', sportChosen: false, units: 'km', openActivity: null, filter: new Set(), filterFor: null, emailScenario: 'patterns' };
+const state = { admin: null, me: null, insights: null, runs: null, recent: null, sport: 'run', sportChosen: false, units: 'km', openActivity: null, filter: new Set(), filterFor: null, emailScenario: 'patterns' };
 
 // Units: what the person picks here, else their Strava setting when Strava
 // shares it, else whatever the rest of garvitgupta.com is showing them: its
@@ -155,6 +155,7 @@ function wordmark() {
 const MENU_ICONS = {
 	sync: 'M20 11a8 8 0 0 0-14.3-4.5M4 4v3.5h3.5M4 13a8 8 0 0 0 14.3 4.5M20 20v-3.5h-3.5',
 	mail: 'M4 6.5h16v11H4zM4.5 7l7.5 6 7.5-6',
+	admin: 'M4 5h16M4 12h16M4 19h16M8 3v4M15 10v4M10 17v4',
 	unlink: 'M10.5 6.5l1-1a4 4 0 0 1 5.7 5.7l-1 1M13.5 17.5l-1 1a4 4 0 0 1-5.7-5.7l1-1M4 4l16 16',
 	leave: 'M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l4 4-4 4M19 12H9',
 	trash: 'M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12M10.5 10.5v5.5M13.5 10.5v5.5',
@@ -185,6 +186,7 @@ function header() {
 			h('summary', null, me.user.avatar ? h('img', { class: 'avatar', src: me.user.avatar, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { class: 'avatar' }), me.user.name),
 			h('div', { class: 'sheet' },
 				!me.user.is_demo && item('sync', 'Sync now', () => act(() => api('api/sync', 'POST'))),
+				me.owner && item('admin', 'Admin', () => (location.hash = '#/admin')),
 				!me.user.is_demo && item('mail', 'Emails', () => (location.hash = '#/emails')),
 				!me.user.is_demo && me.spotify.connected && rule(),
 				!me.user.is_demo && me.spotify.connected && item('unlink', 'Disconnect Spotify', () => confirm('Disconnect Spotify? Songs already matched are kept.') && act(() => api('api/spotify', 'DELETE'))),
@@ -1048,17 +1050,18 @@ function emailSettings() {
 }
 
 function emailsPage() {
+	return h('div', { class: 'wrap' },
+		header(),
+		h('h1', { class: 'title' }, 'Emails'),
+		h('p', { class: 'when' }, 'Where Cadence sends your updates, and how often.'),
+		emailSettings(),
+		footer(),
+	);
+}
+
+/** Every email Cadence sends, filled in with the owner's own data, in a mail window, with when each last went out. */
+function mailroom() {
 	const { me } = state;
-	// Only the owner sees what each email looks like; everyone else, their own settings.
-	if (!me.owner) {
-		return h('div', { class: 'wrap' },
-			header(),
-			h('h1', { class: 'title' }, 'Emails'),
-			h('p', { class: 'when' }, 'Where Cadence sends your updates, and how often.'),
-			emailSettings(),
-			footer(),
-		);
-	}
 	const scenario = EMAIL_SCENARIOS.find((x) => x.id === state.emailScenario) || EMAIL_SCENARIOS[2];
 	const query = `?cast=${CAST}&units=${state.units}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}${scenario.variant ? `&variant=${scenario.variant}` : ''}`;
 
@@ -1090,23 +1093,109 @@ function emailsPage() {
 		h('iframe', { class: 'mail-body', title: `${scenario.title} email`, sandbox: 'allow-popups allow-popups-to-escape-sandbox', src: `api/emails/${scenario.kind}/html${query}` }),
 	);
 
+	return h('div', { class: 'mailroom' },
+		h('div', { class: 'scenarios', role: 'group', 'aria-label': 'Which email to show' },
+			EMAIL_SCENARIOS.map((x) =>
+				h('button', { class: 'scenario', 'aria-pressed': String(x.id === scenario.id), onclick: () => ((state.emailScenario = x.id), render(true)) },
+					h('b', null, x.title), h('span', null, x.when), lastSent(x.kind) && h('span', { class: 'sent' }, lastSent(x.kind)))),
+			example,
+			h('p', { class: 'fine left' }, 'Sent from Cadence <no-reply@cadence.garvitgupta.com>.'),
+		),
+		windowed,
+	);
+}
+
+// --- admin -------------------------------------------------------------------------------------
+
+/** A small coloured label: 'ok' green, 'warn' amber, 'bad' red, or plain grey. */
+const tag = (text, tone) => h('span', { class: `tag${tone ? ` ${tone}` : ''}` }, text);
+
+/** One service's connection for one person: its state, and when it was last checked or what went wrong. */
+function connection(status, synced, error, notAllowed) {
+	if (!status) return h('div', null, tag('Not connected'));
+	const tone = status === 'ok' ? (error ? 'warn' : 'ok') : 'bad';
+	const label = status === 'ok' ? (error ? 'Error' : 'Connected') : status === notAllowed ? 'Not on the list' : 'Needs reconnecting';
+	return h('div', null, tag(label, tone), h('div', { class: 'sub', title: error || '' }, error ? error.slice(0, 60) : synced ? `checked ${agoShort(synced)}` : 'never checked'));
+}
+
+/** The owner's page: everyone who has signed in, what they have connected and get emailed, the asks for access, and every email. */
+function adminPage() {
+	const box = h('div', null, h('p', { class: 'when' }, 'Loading…'));
+	(state.admin ? Promise.resolve(state.admin) : api('api/admin').then((d) => (state.admin = d)))
+		.then((d) => box.replaceChildren(...adminBody(d)))
+		.catch((err) => box.replaceChildren(h('div', { class: 'card note error' }, h('p', null, h('strong', null, 'The admin page could not load.'), err.message))));
 	return h('div', { class: 'wrap' },
 		header(),
-		h('h1', { class: 'title' }, 'Emails'),
+		h('h1', { class: 'title' }, 'Admin'),
+		h('p', { class: 'when' }, 'Only you can see this page.'),
+		box,
+		h('h2', { class: 'section' }, 'Emails'),
 		h('p', { class: 'when' }, 'What Cadence sends, filled in with your own data.'),
-		emailSettings(),
-		h('div', { class: 'mailroom' },
-			h('div', { class: 'scenarios', role: 'group', 'aria-label': 'Which email to show' },
-				EMAIL_SCENARIOS.map((x) =>
-					h('button', { class: 'scenario', 'aria-pressed': String(x.id === scenario.id), onclick: () => ((state.emailScenario = x.id), render(true)) },
-						h('b', null, x.title), h('span', null, x.when), lastSent(x.kind) && h('span', { class: 'sent' }, lastSent(x.kind)))),
-				example,
-				h('p', { class: 'fine left' }, 'Sent from Cadence <no-reply@cadence.garvitgupta.com>.'),
-			),
-			windowed,
-		),
+		mailroom(),
 		footer(),
 	);
+}
+
+function adminBody({ users, requests }) {
+	const count = (test) => users.filter(test).length;
+	const tiles = h('div', { class: 'tiles admin-tiles' },
+		tile('People', String(users.length)),
+		tile('Spotify connected', String(count((u) => u.spotify_status === 'ok'))),
+		tile('Emails confirmed', String(count((u) => u.email_confirmed_at))),
+		tile('Activities with music', String(users.reduce((a, u) => a + u.with_music, 0))),
+	);
+
+	const person = (u) => h('div', { class: 'person' },
+		u.avatar ? h('img', { class: 'avatar', src: u.avatar, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { class: 'avatar' }),
+		h('div', null,
+			h('b', null, u.name),
+			h('div', { class: 'sub' },
+				h('a', { href: `https://www.strava.com/athletes/${u.strava_athlete_id}`, target: '_blank', rel: 'noopener' }, 'Strava'),
+				` · joined ${day(u.created_at)}`,
+				u.session_until > Date.now() / 1000 ? ' · signed in' : ''),
+		));
+	const email = (u) => {
+		if (!u.email) return h('div', null, tag('No address'));
+		const on = [u.email_weekly && 'Sundays', u.activity_emails && 'Each activity'].filter(Boolean);
+		return h('div', null,
+			h('div', { class: 'addr' }, u.email),
+			h('div', { class: 'tags' },
+				u.email_confirmed_at ? tag('Confirmed', 'ok') : tag('Unconfirmed', 'warn'),
+				on.length ? on.map((x) => tag(x)) : tag('Off', 'bad')),
+			h('div', { class: 'sub' }, [
+				u.welcome_sent_at && `welcome ${agoShort(u.welcome_sent_at)}`,
+				u.weekly_sent_at && `Sunday ${agoShort(u.weekly_sent_at)}`,
+				u.activity_sent_at && `activity ${agoShort(u.activity_sent_at)}`,
+			].filter(Boolean).join(' · ') || 'nothing sent yet'));
+	};
+	const data = (u) => h('div', null,
+		h('div', null, `${plural(u.runs, 'run')} · ${plural(u.rides, 'ride')}`),
+		h('div', { class: 'sub' }, `${u.with_music} with music · ${plural(u.plays, 'song')}${u.last_activity ? ` · last ${agoShort(u.last_activity)}` : ''}`));
+
+	const table = h('div', { class: 'card flush scroll' },
+		h('table', { class: 'table admin' },
+			h('thead', null, h('tr', null, ['Person', 'Strava', 'Spotify', 'Email', 'Activities'].map((x) => h('th', null, x)))),
+			h('tbody', null, users.map((u) => h('tr', null,
+				h('td', null, person(u)),
+				h('td', null, connection(u.strava_status, u.strava_synced, u.strava_error)),
+				h('td', null, connection(u.spotify_status, u.spotify_synced, u.spotify_error, 'not-allowed')),
+				h('td', null, email(u)),
+				h('td', null, data(u)),
+			))),
+		));
+
+	const asks = requests.length
+		? h('div', { class: 'card flush scroll' }, h('table', { class: 'table admin' },
+			h('thead', null, h('tr', null, ['Who', 'Spotify email', 'Note', 'When'].map((x) => h('th', null, x)))),
+			h('tbody', null, requests.map((r) => h('tr', null,
+				h('td', null, h('b', null, r.name)),
+				h('td', null, h('a', { href: `mailto:${r.spotify_email}` }, r.spotify_email)),
+				h('td', { class: 'dim' }, r.message || '–'),
+				h('td', { class: 'dim' }, agoShort(r.created_at)),
+			)))))
+		: h('p', { class: 'when' }, 'No one has asked yet.');
+
+	return [tiles, h('h2', { class: 'section' }, 'People'), table, h('h2', { class: 'section' }, 'Asked for Spotify access'), asks];
 }
 
 // --- routing ------------------------------------------------------------------
@@ -1118,6 +1207,7 @@ function render(keepScroll) {
 	const run = location.hash.match(/^#\/run\/(\d+)$/);
 	if (run) return runPage(run[1]);
 	if (location.hash === '#/emails' && !state.me.user.is_demo) return app.replaceChildren(emailsPage());
+	if (location.hash === '#/admin' && state.me.owner) return app.replaceChildren(adminPage());
 	const activity = location.hash.match(/^#\/activity\/(-?\d+)$/);
 	const wasOpen = state.openActivity != null;
 	state.openActivity = activity ? Number(activity[1]) : null;
@@ -1127,5 +1217,9 @@ function render(keepScroll) {
 	else if (keepScroll !== true) scrollTo(0, 0);
 }
 
-addEventListener('hashchange', () => render());
+addEventListener('hashchange', () => {
+	// The admin page loads afresh each time it is opened.
+	state.admin = null;
+	render();
+});
 load();
