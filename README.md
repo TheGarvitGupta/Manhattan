@@ -107,19 +107,28 @@ there is a new migration).
 
 ## Emails
 
-Two emails, written in `src/emails.ts`, from `Cadence <no-reply@cadence.garvitgupta.com>`:
+Strava does not share an email address, so a new account is asked for one
+before anything else, and picks how often to hear from Cadence: Sundays only,
+or Sundays plus a note after every run or ride. Written in `src/emails.ts`,
+from `Cadence <no-reply@cadence.garvitgupta.com>`:
 
-- **Welcome**: once, when someone turns on email updates. It carries the
+- **Welcome**: once, when someone gives an address. It carries the
   "Confirm my email" button; nothing else is sent until they tap it.
+- **After each run or ride** (if they asked): about 20 minutes after it ends,
+  only if music was playing. The route on a map with each song's stretch in its
+  own colour, every song with its pace or speed, then that sport's findings (or
+  how many more activities it needs). The map is drawn by Mapbox's Static
+  Images API and served through the Worker (`src/staticmap.ts`), on a signed
+  link, so the token never appears in an email.
 - **Sunday roundup**: 9am every Sunday in the reader's timezone. Their last 10
   songs and last 10 runs and rides (each with its songs) while Cadence is still collecting, or the top findings
   once there are five runs with music. Biking joins the same email on the same
   terms: its findings appear once there are five rides with music, and until
   then the email says how many there are so far.
 
-Strava does not share an email address, so people enter one on the Emails
-page. The demo account's Emails page (in the account menu) shows all three, filled in with
-the demo runner's data.
+Turning emails off (on the Emails page, or from a link in any email) keeps the
+address. The Emails page shows each email filled in with the account's own data
+(or the demo runner's, until there is some), and when each was last sent.
 
 Emails go out through Resend (resend.com, free at this volume). Sending is off
 until it is set up:

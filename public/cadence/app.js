@@ -272,7 +272,11 @@ function askForAccess() {
 	);
 }
 
-const EMAIL_NOTES = { confirmed: ['Email confirmed.', 'Your Sunday roundup starts this week.'], off: ['Emails turned off.', 'You won’t hear from Cadence again unless you turn them back on.'] };
+const EMAIL_NOTES = {
+	confirmed: ['Email confirmed.', 'Your updates start with your next run or ride.'],
+	off: ['Emails turned off.', 'You won’t hear from Cadence again unless you turn them back on, under Emails in the account menu.'],
+	sundays: ['Just Sundays, then.', 'No more notes after each activity. The Sunday roundup carries on.'],
+};
 
 /** The one-off message after following a link in an email. Works signed in or out. */
 function emailNotice() {
@@ -948,10 +952,24 @@ async function runPage(id) {
 // --- emails ----------------------------------------------------------------------------------
 
 const EMAIL_SCENARIOS = [
-	{ id: 'welcome', kind: 'welcome', title: 'Welcome', when: 'Once, when you turn on email updates.', at: 'just now' },
+	{ id: 'welcome', kind: 'welcome', title: 'Welcome', when: 'Once, when you give your email address.', at: 'just now' },
+	{ id: 'activity', kind: 'activity', title: 'After each run or ride', when: 'About 20 minutes after you finish, if music was playing. Only if you ask for it.', at: 'just now' },
 	{ id: 'collecting', kind: 'weekly', variant: 'collecting', title: 'Sunday roundup: still collecting', when: 'Sundays at 9am, until there are 5 runs or 5 rides with music.', at: 'Sun 9:00 AM' },
 	{ id: 'patterns', kind: 'weekly', variant: 'patterns', title: 'Sunday roundup: your patterns', when: 'Sundays at 9am, with running and biking once each has enough.', at: 'Sun 9:00 AM' },
 ];
+
+/** When this account was last sent an email of this kind, said briefly. Both Sunday roundups share one time. */
+function lastSent(kind) {
+	const { me } = state;
+	if (me.user.is_demo) return null;
+	const at = me.email.sent[kind];
+	return at ? `Last sent ${agoLong(at)}` : 'Not sent yet';
+}
+const agoLong = (ts) => {
+	const sec = Math.max(0, Math.round(Date.now() / 1000 - ts));
+	const unit = (n, word) => `${plural(n, word)} ago`;
+	return sec < 60 ? 'just now' : sec < 3600 ? unit(Math.floor(sec / 60), 'minute') : sec < 86400 ? unit(Math.floor(sec / 3600), 'hour') : sec < 2 * 86400 ? 'yesterday' : unit(Math.floor(sec / 86400), 'day');
+};
 
 const ICONS = {
 	archive: 'M3 6h18v4H3zM5 10v9h14v-9M10 14h4',
@@ -962,22 +980,78 @@ const ICONS = {
 };
 const icon = (name) => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: ICONS[name] }));
 
-/** The sign-up card for real accounts. The demo only looks at examples. */
+// How often someone hears from Cadence. The Sunday roundup always comes; the note after each activity is extra.
+const CADENCES = [
+	{ id: 'weekly', title: 'Sundays', text: 'A roundup every Sunday at 9am: your week, and your fastest songs once there are enough runs or rides.' },
+	{ id: 'activity', title: 'Sundays, and after every run or ride', text: 'Also a note when you finish: your route on a map, each song in its own colour, and how fast you went to each.' },
+];
+
+/** The choice between the two, as a pair of radio cards. `off` adds a third, for turning emails off. Returns the element and a reader. */
+function cadencePicker(current, off) {
+	const options = off ? [...CADENCES, { id: 'off', title: 'No emails', text: 'Cadence keeps your address, and sends nothing.' }] : CADENCES;
+	const name = `cadence-${Math.random().toString(36).slice(2, 8)}`;
+	const radios = options.map((o) => h('input', { type: 'radio', name, value: o.id, checked: o.id === current }));
+	const el = h('div', { class: 'choices', role: 'radiogroup', 'aria-label': 'How often to email you' },
+		options.map((o, i) => h('label', { class: 'choice' }, radios[i], h('span', null, h('b', null, o.title), h('span', null, o.text)))));
+	return { el, value: () => radios.find((r) => r.checked)?.value ?? 'weekly' };
+}
+
+const saveEmail = (address, cadence) =>
+	api('api/email', 'POST', { email: address, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, units: state.units, weekly: cadence !== 'off', activity: cadence === 'activity' });
+
+/** Before anything else, a new account gives an email address and picks how often to hear from Cadence. */
+function emailGate() {
+	const { me } = state;
+	const input = h('input', { class: 'field', type: 'email', required: true, placeholder: 'you@example.com', autocomplete: 'email', 'aria-label': 'Email address' });
+	const picker = cadencePicker('weekly');
+	const error = h('p', { class: 'gate-error', role: 'alert', hidden: true });
+	const submit = h('button', { class: 'btn primary', type: 'submit' }, 'Continue');
+	const go = async () => {
+		submit.disabled = true;
+		error.hidden = true;
+		try {
+			await saveEmail(input.value, picker.value());
+			await load();
+		} catch (err) {
+			error.textContent = err.message;
+			error.hidden = false;
+			submit.disabled = false;
+		}
+	};
+	return h('div', { class: 'wrap' },
+		header(),
+		h('form', { class: 'card gate', onsubmit: (e) => (e.preventDefault(), go()) },
+			h('h1', null, `Welcome, ${me.user.name.split(' ')[0]}. Where should updates go?`),
+			h('p', null, 'Strava doesn’t share your email, so Cadence asks. It’s only used for the emails you pick here, and you can change them any time.'),
+			h('label', { class: 'gate-label' }, 'Email address', input),
+			h('div', { class: 'gate-label' }, 'How often'),
+			picker.el,
+			error,
+			submit,
+		),
+		footer(),
+	);
+}
+
+/** The settings card for real accounts: the address, and how often. The demo only looks at examples. */
 function emailSettings() {
 	const { me } = state;
 	if (me.user.is_demo) return null;
-	if (!me.email.available) return h('div', { class: 'card note' }, h('p', null, h('strong', null, 'Email updates aren’t switched on yet.'), 'These are previews, built from your own data.'));
-	if (me.email.address) {
-		return h('div', { class: 'card note' },
-			h('p', null, h('strong', null, me.email.confirmed ? `Sunday emails go to ${me.email.address}` : `Check ${me.email.address} for the welcome email`), me.email.confirmed ? 'Every Sunday at 9am your time.' : 'Tap “Confirm my email” in it and the Sunday roundup starts.'),
-			h('button', { class: 'btn small', onclick: () => act(() => api('api/email', 'DELETE')) }, 'Turn off'),
-		);
-	}
-	const input = h('input', { class: 'field', type: 'email', placeholder: 'you@example.com', autocomplete: 'email', 'aria-label': 'Email address' });
-	const turnOn = () => act(() => api('api/email', 'POST', { email: input.value, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, units: state.units }));
-	return h('div', { class: 'card note' },
-		h('p', null, h('strong', null, 'Get a Sunday roundup'), 'A welcome email now, then a short summary every Sunday at 9am.'),
-		h('form', { class: 'inline', onsubmit: (e) => (e.preventDefault(), turnOn()) }, input, h('button', { class: 'btn small', type: 'submit' }, 'Turn on')),
+	const current = !me.email.weekly && !me.email.activity ? 'off' : me.email.activity ? 'activity' : 'weekly';
+	const input = h('input', { class: 'field', type: 'email', required: true, autocomplete: 'email', 'aria-label': 'Email address', value: me.email.address || '' });
+	const picker = cadencePicker(current, true);
+	const status = !me.email.available
+		? 'Sending isn’t switched on yet. Your choice is saved; these are previews built from your own data.'
+		: current === 'off'
+			? 'Emails are off.'
+			: me.email.confirmed
+				? `Going to ${me.email.address}.`
+				: `Check ${me.email.address} for the welcome email and tap “Confirm my email”. Nothing else is sent until then.`;
+	return h('form', { class: 'card settings', onsubmit: (e) => (e.preventDefault(), act(() => saveEmail(input.value, picker.value()))) },
+		h('p', null, h('strong', null, 'Your emails'), status),
+		h('label', { class: 'gate-label' }, 'Email address', input),
+		picker.el,
+		h('button', { class: 'btn small', type: 'submit' }, 'Save'),
 	);
 }
 
@@ -988,7 +1062,7 @@ function emailsPage() {
 
 	const subject = h('div', { class: 'subject' }, '…');
 	const to = h('span', null, me.user.name);
-	const example = h('p', { class: 'fine left', hidden: true }, 'Example: this one uses the demo data. Yours takes over after 5 runs or 5 rides with music.');
+	const example = h('p', { class: 'fine left', hidden: true }, scenario.kind === 'activity' ? 'Example: this one uses the demo data. Yours takes over after your first run or ride with music.' : 'Example: this one uses the demo data. Yours takes over after 5 runs or 5 rides with music.');
 	api(`api/emails/${scenario.kind}${query}`).then((m) => ((subject.textContent = m.subject), (to.textContent = m.to), (example.hidden = !m.example))).catch(() => (subject.textContent = 'Could not load this email.'));
 
 	const group = (...names) => h('span', { class: 'tools' }, names.map(icon));
@@ -1023,7 +1097,7 @@ function emailsPage() {
 			h('div', { class: 'scenarios', role: 'group', 'aria-label': 'Which email to show' },
 				EMAIL_SCENARIOS.map((x) =>
 					h('button', { class: 'scenario', 'aria-pressed': String(x.id === scenario.id), onclick: () => ((state.emailScenario = x.id), render(true)) },
-						h('b', null, x.title), h('span', null, x.when))),
+						h('b', null, x.title), h('span', null, x.when), lastSent(x.kind) && h('span', { class: 'sent' }, lastSent(x.kind)))),
 				example,
 				h('p', { class: 'fine left' }, 'Sent from Cadence <no-reply@cadence.garvitgupta.com>.'),
 			),
@@ -1038,6 +1112,7 @@ function emailsPage() {
 function render(keepScroll) {
 	hideTip();
 	if (!state.me) return app.replaceChildren(landing());
+	if (state.me.email.required) return app.replaceChildren(emailGate());
 	const run = location.hash.match(/^#\/run\/(\d+)$/);
 	if (run) return runPage(run[1]);
 	if (location.hash === '#/emails') return app.replaceChildren(emailsPage());

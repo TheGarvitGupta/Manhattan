@@ -1,16 +1,19 @@
-// The two emails Cadence sends, and when.
+// The emails Cadence sends, and when.
 //
-//   welcome  once, when someone turns on email updates (it carries the
-//            "confirm your address" button)
-//   weekly   9am every Sunday in the reader's own timezone: their last 10
-//            songs and activities while Cadence is still collecting, or the
-//            top findings once there are enough runs with music
+//   welcome   once, when someone gives their address (it carries the
+//             "confirm your address" button)
+//   weekly    9am every Sunday in the reader's own timezone: their last 10
+//             songs and activities while Cadence is still collecting, or the
+//             top findings once there are enough runs with music
+//   activity  if they asked for it, after each run or ride that had music:
+//             its route with the songs on it, then how that sport is going
 //
 // Email is written for mail clients: tables and inline styles only.
 
 import { buildInsights } from './insights';
 import { songIntervals } from './match';
 import { RIDE_TYPES, Sport, SPORTS } from './providers';
+import { mapLink, songColor } from './staticmap';
 import { Env, now, recast, User } from './util';
 
 export const FROM = { email: 'no-reply@cadence.garvitgupta.com', name: 'Cadence' };
@@ -23,7 +26,7 @@ const WORDS = {
 } as const;
 const RUN_TYPES = ['Run', 'TrailRun', 'VirtualRun'];
 
-export type Kind = 'welcome' | 'weekly';
+export type Kind = 'welcome' | 'weekly' | 'activity';
 export type Variant = 'collecting' | 'patterns';
 
 export interface Email {
@@ -41,6 +44,10 @@ export interface EmailUser extends User {
   email_units: string | null;
   welcome_sent_at: number | null;
   weekly_sent_at: number | null;
+  // Which emails they get: the Sunday roundup, and a note after each run or ride (for those since they asked).
+  email_weekly: number;
+  activity_emails: number;
+  activity_emails_since: number | null;
 }
 
 // --- formatting -------------------------------------------------------------------
@@ -177,6 +184,9 @@ function links(env: Env, origin: string, user: EmailUser) {
     app,
     confirm: `${app}auth/email/confirm?t=${token}`,
     off: `${app}auth/email/off?t=${token}`,
+    // Stops the note after each activity and keeps the Sunday roundup.
+    offActivity: `${app}auth/email/off?t=${token}&only=activity`,
+    settings: `${app}#/emails`,
   };
 }
 
@@ -213,10 +223,12 @@ async function welcome(env: Env, origin: string, user: EmailUser): Promise<Email
   <td style="padding:12px 0;border-top:1px solid ${LINE};font:15px/1.4 ${FONT};color:${INK};"><b style="font-weight:600;">${esc(title)}</b><br><span style="color:${SOFT};font-size:14px;">${esc(text)}</span></td>
 </tr>`;
 
+  // What they asked for.
+  const what = user.activity_emails ? 'the Sunday roundup and a note after each run or ride' : 'the Sunday roundup';
   const hero = `${kicker('Welcome')}${headline(`You're in, ${firstName(user)}.`)}${lede('Cadence lines up your Strava runs and rides with what you were listening to on Spotify, and finds the songs you go fastest to.')}`;
   const body = `
 ${button(l.confirm, 'Confirm my email')}
-<p style="margin:0;font:13px/1.5 ${FONT};color:${MUTED};">One tap, so the Sunday roundup goes to the right person.</p>
+<p style="margin:0;font:13px/1.5 ${FONT};color:${MUTED};">One tap, so ${esc(what)} ${user.activity_emails ? 'go' : 'goes'} to the right person.</p>
 ${heading('What happens next')}
 ${table(
   step(true, 'Strava connected', 'New activities arrive on their own.') +
@@ -227,8 +239,8 @@ ${table(
   return {
     subject: 'Welcome to Cadence',
     preview: 'Confirm your email, then just run or ride with music on.',
-    html: shell('Welcome to Cadence', hero, body, 'Confirm your email, then just run or ride with music on.', `You're getting this because you turned on email updates in Cadence. <a href="${esc(l.off)}" style="color:${MUTED};">Turn them off</a>.`, l.app),
-    text: `You're in, ${firstName(user)}.\n\nConfirm your email: ${l.confirm}\n\nWhat happens next: run or ride with music on. After ${RUNS_NEEDED} runs, or ${RUNS_NEEDED} rides, your fastest and slowest songs appear, and a short roundup arrives every Sunday at 9am.\n\nOpen Cadence: ${l.app}\nTurn these emails off: ${l.off}`,
+    html: shell('Welcome to Cadence', hero, body, 'Confirm your email, then just run or ride with music on.', `You're getting this because you gave Cadence your email address. <a href="${esc(l.off)}" style="color:${MUTED};">Turn them off</a>.`, l.app),
+    text: `You're in, ${firstName(user)}.\n\nConfirm your email: ${l.confirm}\n\nWhat happens next: run or ride with music on. After ${RUNS_NEEDED} runs, or ${RUNS_NEEDED} rides, your fastest and slowest songs appear. You'll get ${what === 'the Sunday roundup' ? 'a short roundup every Sunday at 9am' : 'a short roundup every Sunday at 9am, and a note after each run or ride with music'}.\n\nOpen Cadence: ${l.app}\nTurn these emails off: ${l.off}`,
   };
 }
 
@@ -240,6 +252,56 @@ interface WeekTotals {
   run_m: number;
   ride_m: number;
   songs: number;
+}
+
+/** The week in a line and in three tiles: both sports when there was some of each. */
+function weekSummary(t: WeekTotals, u: ReturnType<typeof units>): { line: string; tiles: [string, string][] } {
+  const did = [
+    t.runs || !t.rides ? `${plural(t.runs, 'run')}${t.runs ? `, ${u.dist(t.run_m)}` : ''}` : '',
+    t.rides ? `${plural(t.rides, 'ride')}, ${u.dist(t.ride_m)}` : '',
+  ].filter(Boolean);
+  const songsTile: [string, string] = [String(t.songs), t.songs === 1 ? 'song played' : 'songs played'];
+  return {
+    line: `${did.join('; ')} and ${plural(t.songs, 'song')} this week.`,
+    tiles:
+      t.runs && t.rides
+        ? [[String(t.runs), t.runs === 1 ? 'run this week' : 'runs this week'], [String(t.rides), t.rides === 1 ? 'ride this week' : 'rides this week'], songsTile]
+        : t.rides
+          ? [[String(t.rides), t.rides === 1 ? 'ride this week' : 'rides this week'], [u.dist(t.ride_m), 'ridden'], songsTile]
+          : [[String(t.runs), t.runs === 1 ? 'run this week' : 'runs this week'], [t.runs ? u.dist(t.run_m) : '–', 'run'], songsTile],
+  };
+}
+
+/** One circle per activity needed, gold with a tick once it's done. On the violet band, or (`light`) on the white body. */
+function dots(have: number, light = false): string {
+  const open = light ? '#c9c2f5' : '#a99df0';
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:${light ? '6px 0 12px' : '16px 0 0'};"><tr>${Array.from({ length: RUNS_NEEDED }, (_, i) =>
+    i < have
+      ? `<td style="padding-right:8px;"><div style="width:34px;height:34px;border-radius:17px;background:${GOLD};color:#4a36c4;font:800 16px/34px ${FONT};text-align:center;">&#10003;</div></td>`
+      : `<td style="padding-right:8px;"><div style="width:30px;height:30px;border-radius:17px;border:2px solid ${open};color:${open};font:700 13px/30px ${FONT};text-align:center;">${i + 1}</div></td>`,
+  ).join('')}</tr></table>`;
+}
+
+type Insights = Awaited<ReturnType<typeof buildInsights>>;
+
+/** A sport's findings: its fastest and most played songs, and its fastest kilometre or mile. The site has the rest. */
+function sportBlock(i: Insights, s: Sport, unit: string, user: EmailUser, named: boolean): string {
+  const u = units(unit);
+  const w = WORDS[s];
+  const average = i.totals.distance_m / i.totals.moving_s;
+  const shortGap = (speed: number) => u.against(speed, average, s).replace(' than your average', '');
+  const best = unit === 'mi' ? i.best_mile : i.best_km;
+  const stretch = unit === 'mi' ? 'mile' : 'kilometre';
+  return `
+${heading(named ? `Fastest songs, ${w.doing}` : 'Fastest songs')}
+${table(i.fastest.slice(0, 3).map((x) => row(x.image, x.name, x.artist, u.rate(x.speed, s), shortGap(x.speed))).join(''))}
+${heading(`Most played on ${w.many}`)}
+${table(i.most_played.slice(0, 3).map((x) => row(x.image, x.name, x.artist, `${x.plays}×`, `on ${plural(x.runs, w.one)}`)).join(''))}
+${
+  best
+    ? `${heading(named ? `Fastest ${stretch}, ${w.doing}` : `Fastest ${stretch}`)}${table(row(best.song?.image ?? null, minSec(best.seconds!), best.song ? `${best.song.name} was playing` : 'No music playing', new Date(best.start_time * 1000).toLocaleDateString('en-US', { timeZone: user.email_tz || 'UTC', month: 'short', day: 'numeric' })))}`
+    : ''
+}`;
 }
 
 async function week(env: Env, user: User): Promise<WeekTotals> {
@@ -275,19 +337,7 @@ async function weekly(env: Env, origin: string, user: EmailUser, unit: string, f
   const shown = forced === 'collecting' ? [] : forced === 'patterns' ? ready : ready.filter((s) => withMusic(s) >= RUNS_NEEDED);
   const footer = `You're getting this every Sunday because you turned on email updates in Cadence. <a href="${esc(l.off)}" style="color:${MUTED};">Turn them off</a>.`;
 
-  // The week in a line and in three tiles: both sports when there was some of each.
-  const did = [
-    t.runs || !t.rides ? `${plural(t.runs, 'run')}${t.runs ? `, ${u.dist(t.run_m)}` : ''}` : '',
-    t.rides ? `${plural(t.rides, 'ride')}, ${u.dist(t.ride_m)}` : '',
-  ].filter(Boolean);
-  const weekLine = `${did.join('; ')} and ${plural(t.songs, 'song')} this week.`;
-  const songsTile: [string, string] = [String(t.songs), t.songs === 1 ? 'song played' : 'songs played'];
-  const weekTiles: [string, string][] =
-    t.runs && t.rides
-      ? [[String(t.runs), t.runs === 1 ? 'run this week' : 'runs this week'], [String(t.rides), t.rides === 1 ? 'ride this week' : 'rides this week'], songsTile]
-      : t.rides
-        ? [[String(t.rides), t.rides === 1 ? 'ride this week' : 'rides this week'], [u.dist(t.ride_m), 'ridden'], songsTile]
-        : [[String(t.runs), t.runs === 1 ? 'run this week' : 'runs this week'], [t.runs ? u.dist(t.run_m) : '–', 'run'], songsTile];
+  const { line: weekLine, tiles: weekTiles } = weekSummary(t, u);
 
   if (!shown.length) {
     const songs = await recast(
@@ -351,15 +401,9 @@ async function weekly(env: Env, origin: string, user: EmailUser, unit: string, f
     const w = WORDS[lead];
     // Previewing this email for an account that is already past it: show a mid-way count.
     const have = withMusic(lead) >= RUNS_NEEDED ? RUNS_NEEDED - 2 : withMusic(lead);
-    // One circle per activity needed: gold with a tick once it's done.
-    const circles = Array.from({ length: RUNS_NEEDED }, (_, i) =>
-      i < have
-        ? `<td style="padding-right:8px;"><div style="width:34px;height:34px;border-radius:17px;background:${GOLD};color:#4a36c4;font:800 16px/34px ${FONT};text-align:center;">&#10003;</div></td>`
-        : `<td style="padding-right:8px;"><div style="width:30px;height:30px;border-radius:17px;border:2px solid #a99df0;color:#a99df0;font:700 13px/30px ${FONT};text-align:center;">${i + 1}</div></td>`,
-    ).join('');
     const also = ins[other].totals.runs > 0 ? ` ${WORDS[other].doing[0].toUpperCase()}${WORDS[other].doing.slice(1)} is counted apart: ${withMusic(other) >= RUNS_NEEDED ? RUNS_NEEDED - 2 : withMusic(other)} of ${RUNS_NEEDED} ${WORDS[other].many} with music so far.` : '';
     const hero = `${kicker('Still collecting')}${headline(`${have} of ${RUNS_NEEDED} ${w.many} with music`)}
-<table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0 0;"><tr>${circles}</tr></table>
+${dots(have)}
 ${lede(esc(`Your fastest and slowest songs appear after ${RUNS_NEEDED}.${also}`))}`;
     const body = `
 ${figures(weekTiles)}
@@ -403,23 +447,7 @@ ${button(l.app, 'Open Cadence')}`;
 </tr></table>`;
 
   const several = shown.length > 1;
-  const shortGap = (s: Sport, speed: number) => u.against(speed, average(s), s).replace(' than your average', '');
-  const block = (s: Sport) => {
-    const w = WORDS[s];
-    const i = ins[s];
-    const best = unit === 'mi' ? i.best_mile : i.best_km;
-    const stretch = unit === 'mi' ? 'mile' : 'kilometre';
-    return `
-${heading(several ? `Fastest songs, ${w.doing}` : 'Fastest songs')}
-${table(i.fastest.slice(0, 3).map((x) => row(x.image, x.name, x.artist, u.rate(x.speed, s), shortGap(s, x.speed))).join(''))}
-${heading(`Most played on ${w.many}`)}
-${table(i.most_played.slice(0, 3).map((x) => row(x.image, x.name, x.artist, `${x.plays}×`, `on ${plural(x.runs, w.one)}`)).join(''))}
-${
-  best
-    ? `${heading(several ? `Fastest ${stretch}, ${w.doing}` : `Fastest ${stretch}`)}${table(row(best.song?.image ?? null, minSec(best.seconds!), best.song ? `${best.song.name} was playing` : 'No music playing', new Date(best.start_time * 1000).toLocaleDateString('en-US', { timeZone: user.email_tz || 'UTC', month: 'short', day: 'numeric' })))}`
-    : ''
-}`;
-  };
+  const block = (s: Sport) => sportBlock(ins[s], s, unit, user, several);
   // A sport still short of its number is counted, so its patterns are known to be on their way.
   const waiting = SPORTS.filter((s) => !shown.includes(s) && ins[s].totals.runs > 0)
     .map((s) => `${heading(`${WORDS[s].doing[0].toUpperCase()}${WORDS[s].doing.slice(1)}: still collecting`)}${para(esc(`${Math.min(withMusic(s), RUNS_NEEDED - 1)} of ${RUNS_NEEDED} ${WORDS[s].many} with music so far. Its fastest and slowest songs join this email after ${RUNS_NEEDED}.`))}`)
@@ -446,17 +474,158 @@ ${button(l.app, 'See everything')}
   };
 }
 
+// --- after each activity ---------------------------------------------------------------------
+
+interface ActivityRun {
+  id: number;
+  strava_id: number;
+  name: string;
+  sport: Sport;
+  type: string | null;
+  start_time: number;
+  distance_m: number;
+  moving_s: number;
+  polyline: string | null;
+}
+
+interface ActivitySong {
+  start_s: number;
+  end_s: number;
+  distance_m: number;
+  moving_s: number;
+  skipped: number;
+  name: string;
+  artist: string;
+  image: string | null;
+}
+
+// Songs listed in full before the rest are left to the site.
+const SONGS_LISTED = 25;
+
+/**
+ * The note after a run or ride: what was playing, song by song, on a map of
+ * the route where each song's stretch of road wears its own colour, then how
+ * that sport is going (its findings, or how many more it needs).
+ * Without `runId` it is the latest one with music, for previews. Null when there is none.
+ */
+async function activity(env: Env, origin: string, user: EmailUser, unit: string, runId?: number): Promise<Email | null> {
+  const l = links(env, origin, user);
+  const u = units(unit);
+  const run = await env.DB.prepare(
+    `SELECT r.id, r.strava_id, r.name, r.sport, r.start_time, r.distance_m, r.moving_s, a.type, a.polyline
+     FROM runs r LEFT JOIN activities a ON a.user_id = r.user_id AND a.strava_id = r.strava_id
+     WHERE r.user_id = ?1 AND r.stream_state = 'ok' AND (?2 IS NULL OR r.id = ?2) AND EXISTS (SELECT 1 FROM run_songs WHERE run_id = r.id)
+     ORDER BY r.start_time DESC LIMIT 1`,
+  )
+    .bind(user.id, runId ?? null)
+    .first<ActivityRun>();
+  if (!run) return null;
+  const songs = await recast(
+    env,
+    user,
+    (
+      await env.DB.prepare(
+        `SELECT rs.start_s, rs.end_s, rs.distance_m, rs.moving_s, rs.skipped, t.name, t.artist, t.image
+         FROM run_songs rs JOIN tracks t ON t.id = rs.track_id WHERE rs.run_id = ? ORDER BY rs.idx`,
+      )
+        .bind(run.id)
+        .all<ActivitySong>()
+    ).results,
+  );
+  const s = run.sport;
+  const w = WORDS[s];
+  const speedOf = (x: { distance_m: number; moving_s: number }) => (x.moving_s > 0 ? x.distance_m / x.moving_s : 0);
+  const average = speedOf(run);
+  // The fastest song is one that had a minute or more of moving, so a few seconds at a light don't win it.
+  const fastest = songs.filter((x) => x.moving_s >= 60).sort((a, b) => speedOf(b) - speedOf(a))[0] ?? null;
+  const ins = await buildInsights(env, user, s);
+  const have = ins.totals.runs_with_music;
+  const t = await week(env, user);
+  const { line: weekLine, tiles: weekTiles } = weekSummary(t, u);
+  const map = run.polyline && env.MAPBOX_TOKEN ? await mapLink(env, origin, run.id, songs.length) : null;
+  const open = `${l.app}#/activity/${run.strava_id}`;
+
+  const hero = `${kicker(`${kind(run.type ?? (s === 'ride' ? 'Ride' : 'Run'))} · ${whenDated(run.start_time, user.email_tz)}`)}${headline(run.name)}
+${lede(esc(`${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}${fastest ? `. You ${w.verb === 'run' ? 'ran' : 'rode'} fastest to ${fastest.name}.` : '.'}`))}`;
+
+  // Each song's cover wears its colour on the map.
+  const swatch = (x: ActivitySong, i: number) =>
+    x.image
+      ? `<img src="${esc(x.image)}" width="38" height="38" alt="" style="display:block;border:3px solid ${songColor(i)};border-radius:11px;">`
+      : `<div style="width:38px;height:38px;border:3px solid ${songColor(i)};border-radius:11px;background:#eeede8;color:${MUTED};font:600 16px/38px ${FONT};text-align:center;">${esc((x.name || '?')[0])}</div>`;
+  const gap = (x: ActivitySong) => u.against(speedOf(x), average, s).replace('than your average', `than this ${w.one}`).replace('your usual', `this ${w.one}'s usual`);
+  const listed = songs.slice(0, SONGS_LISTED);
+
+  const progress =
+    have >= RUNS_NEEDED && ins.fastest.length
+      ? sportBlock(ins, s, unit, user, true)
+      : `${heading(`${w.doing[0].toUpperCase()}${w.doing.slice(1)}: still collecting`)}
+${dots(Math.min(have, RUNS_NEEDED - 1), true)}
+${para(esc(`${Math.min(have, RUNS_NEEDED - 1)} of ${RUNS_NEEDED} ${w.many} with music so far. ${RUNS_NEEDED - Math.min(have, RUNS_NEEDED - 1)} more and your fastest and slowest songs appear.`))}
+${ins.most_played.length ? `${heading(`Most played on ${w.many}`)}${table(ins.most_played.slice(0, 3).map((x) => row(x.image, x.name, x.artist, `${x.plays}×`, `on ${plural(x.runs, w.one)}`)).join(''))}` : ''}`;
+
+  const body = `
+${
+  map
+    ? `<a href="${esc(open)}" target="_blank" style="display:block;text-decoration:none;"><img src="${esc(map)}" width="500" alt="The route, with each song's stretch in its own colour" style="display:block;width:100%;height:auto;border:0;border-radius:16px;background:#eae8e3;"></a>
+<p style="margin:8px 0 22px;font:13px/1.5 ${FONT};color:${MUTED};">Each colour is a song, laid along the road where it played.</p>`
+    : ''
+}
+${figures([
+  [u.dist(run.distance_m), s === 'ride' ? 'ridden' : 'run'],
+  [length(run.moving_s), 'moving'],
+  [u.rate(average, s), s === 'ride' ? 'average speed' : 'average pace'],
+])}
+${
+  fastest
+    ? `${heading(`Fastest song on this ${w.one}`)}${table(row(fastest.image, fastest.name, fastest.artist, u.rate(speedOf(fastest), s), gap(fastest)))}`
+    : ''
+}
+${heading('What was playing')}
+${table(listed.map((x, i) => row(null, x.name, `${x.artist} · at ${minSec(x.start_s)}${x.skipped ? ' · cut short' : ''}`, u.rate(speedOf(x), s), gap(x).replace(` than this ${w.one}`, ''), swatch(x, i))).join(''))}
+${songs.length > listed.length ? para(esc(`And ${plural(songs.length - listed.length, 'more song')}, on the site.`)) : ''}
+${button(open, `Open this ${w.one}`)}
+${t.runs + t.rides ? `${heading('This week')}${figures(weekTiles)}` : ''}
+${progress}`;
+
+  const subject = fastest ? `${run.name}: you ${w.verb === 'run' ? 'ran' : 'rode'} fastest to ${fastest.name}` : `${run.name}: ${plural(songs.length, 'song')}`;
+  const preview = `${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}. ${weekLine}`;
+  const footer = `You're getting this after each run and ride with music because you asked for it in Cadence. <a href="${esc(l.offActivity)}" style="color:${MUTED};">Just Sundays, please</a> · <a href="${esc(l.off)}" style="color:${MUTED};">Turn all emails off</a>.`;
+  return {
+    subject,
+    preview,
+    html: shell(subject, hero, body, preview, footer, l.app),
+    text: `${run.name}, ${whenDated(run.start_time, user.email_tz)}\n${u.dist(run.distance_m)} · ${length(run.moving_s)} · ${u.rate(average, s)}\n\n${
+      fastest ? `Fastest song: ${fastest.name} by ${fastest.artist}, ${u.rate(speedOf(fastest), s)}.\n\n` : ''
+    }What was playing:\n${songs.map((x) => `- ${x.name} · ${x.artist}: ${u.rate(speedOf(x), s)}`).join('\n')}\n\n${weekLine}\n${
+      have >= RUNS_NEEDED ? '' : `${Math.min(have, RUNS_NEEDED - 1)} of ${RUNS_NEEDED} ${w.many} with music so far.\n`
+    }\nOpen this ${w.one}: ${open}\nJust Sundays, please: ${l.offActivity}\nTurn all emails off: ${l.off}`,
+  };
+}
+
 /** Does this account have enough, in either sport, to fill the patterns email? */
 export async function hasPatterns(env: Env, user: User): Promise<boolean> {
   for (const sport of SPORTS) if ((await buildInsights(env, user, sport)).fastest.length > 0) return true;
   return false;
 }
 
-export async function buildEmail(env: Env, origin: string, user: EmailUser, which: Kind, opts: { unit?: string; variant?: Variant } = {}): Promise<Email> {
+/** Builds one email. Only the activity email can be null: when there is no run or ride with music to write about. */
+export async function buildEmail(
+  env: Env,
+  origin: string,
+  user: EmailUser,
+  which: Kind,
+  opts: { unit?: string; variant?: Variant; runId?: number } = {},
+): Promise<Email | null> {
   // A preview can ask for a unit; otherwise the person's Strava setting decides.
   const own = user.units === 'mi' || user.units === 'km' ? user.units : user.email_units === 'mi' ? 'mi' : 'km';
   const unit = opts.unit === 'mi' || opts.unit === 'km' ? opts.unit : own;
-  const email = await (which === 'welcome' ? welcome(env, origin, user) : weekly(env, origin, user, unit, opts.variant));
+  const email = await (which === 'welcome'
+    ? welcome(env, origin, user)
+    : which === 'activity'
+      ? activity(env, origin, user, unit, opts.runId)
+      : weekly(env, origin, user, unit, opts.variant));
+  if (!email) return null;
   // Covers are stored as Spotify's 64px thumbnails; the 300px picture of the same cover stays sharp on a phone's screen.
   return { ...email, html: email.html.replaceAll('/image/ab67616d00004851', '/image/ab67616d00001e02') };
 }
@@ -530,7 +699,7 @@ function sundayNine(tz: string | null): boolean {
 export async function sendWeekly(env: Env, origin: string): Promise<void> {
   if (!canSend(env)) return;
   const due = await env.DB.prepare(
-    `SELECT * FROM users WHERE is_demo = 0 AND email IS NOT NULL AND email_confirmed_at IS NOT NULL
+    `SELECT * FROM users WHERE is_demo = 0 AND email IS NOT NULL AND email_confirmed_at IS NOT NULL AND email_weekly = 1
        AND COALESCE(weekly_sent_at, 0) < ? LIMIT 20`,
   )
     .bind(now() - 6 * 86400)
@@ -539,10 +708,38 @@ export async function sendWeekly(env: Env, origin: string): Promise<void> {
     if (!sundayNine(user.email_tz)) continue;
     try {
       const email = await buildEmail(env, origin, user, 'weekly');
-      await send(env, user.email!, email, links(env, origin, user).off);
+      if (email) await send(env, user.email!, email, links(env, origin, user).off);
       await env.DB.prepare(`UPDATE users SET weekly_sent_at = ? WHERE id = ?`).bind(now(), user.id).run();
     } catch (err) {
       console.error(`weekly email user ${user.id}:`, err);
+    }
+  }
+}
+
+// Songs land with Spotify when they finish and are fetched every ten minutes, so a run is written up this long after it ends.
+const SETTLE_S = 20 * 60;
+
+/** Cron step: the note after each run or ride with music, once each, to those who asked for it. */
+export async function sendActivityEmails(env: Env, origin: string): Promise<void> {
+  if (!canSend(env)) return;
+  const due = await env.DB.prepare(
+    `SELECT r.id AS run_id, u.* FROM runs r JOIN users u ON u.id = r.user_id
+     WHERE u.is_demo = 0 AND u.email IS NOT NULL AND u.email_confirmed_at IS NOT NULL AND u.activity_emails = 1
+       AND r.emailed_at IS NULL AND r.stream_state = 'ok' AND r.matched_at IS NOT NULL
+       AND r.start_time >= COALESCE(u.activity_emails_since, 0) AND r.start_time > ?1 - 2 * 86400
+       AND r.start_time + r.elapsed_s < ?1 - ?2
+       AND EXISTS (SELECT 1 FROM run_songs WHERE run_id = r.id)
+     ORDER BY r.start_time LIMIT 5`,
+  )
+    .bind(now(), SETTLE_S)
+    .all<EmailUser & { run_id: number }>();
+  for (const user of due.results) {
+    try {
+      const email = await buildEmail(env, origin, user, 'activity', { runId: user.run_id });
+      if (email) await send(env, user.email!, email, links(env, origin, user).off);
+      await env.DB.prepare(`UPDATE runs SET emailed_at = ? WHERE id = ?`).bind(now(), user.run_id).run();
+    } catch (err) {
+      console.error(`activity email run ${user.run_id}:`, err);
     }
   }
 }

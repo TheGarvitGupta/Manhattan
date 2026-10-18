@@ -1,10 +1,11 @@
 // Cadence: which songs make you run faster?
 // Routes live under env.BASE_PATH (/cadence) so the app can sit on the main site.
 
-import { accessRequestEmail, buildEmail, canSend, EmailUser, FROM, hasPatterns, Kind, send, sendWeekly, Variant } from './emails';
+import { accessRequestEmail, buildEmail, canSend, EmailUser, FROM, hasPatterns, Kind, send, sendActivityEmails, sendWeekly, Variant } from './emails';
 import { buildInsights } from './insights';
 import { SongInterval, songIntervals } from './match';
 import { accessToken, authorizeUrl, exchangeSpotifyCode, exchangeStravaCode, Provider, saveTokens, Sport, stravaDeauthorize } from './providers';
+import { serveMap } from './staticmap';
 import { syncAll, syncUser } from './sync';
 import { Env, getCookie, json, now, randomToken, recast, redirect, setCookie, sha256Hex, User } from './util';
 
@@ -112,6 +113,8 @@ async function me(env: Env, user: User) {
     .bind(user.id)
     .first<{ t: number | null }>();
   const asked = await env.DB.prepare(`SELECT 1 FROM access_requests WHERE user_id = ? AND created_at > ? LIMIT 1`).bind(user.id, now() - 30 * 86400).first();
+  const lastNote = await env.DB.prepare(`SELECT MAX(emailed_at) AS t FROM runs WHERE user_id = ?`).bind(user.id).first<{ t: number | null }>();
+  const e = user as EmailUser;
   const conn = (p: Provider) => {
     const t = tokens.results.find((x) => x.provider === p);
     // The demo account has data but no real connections.
@@ -129,7 +132,17 @@ async function me(env: Env, user: User) {
     mapbox: env.MAPBOX_TOKEN ?? null,
     // Whether they have already asked the owner to be added to Spotify.
     access_requested: !!asked,
-    email: { available: canSend(env), address: (user as EmailUser).email ?? null, confirmed: !!(user as EmailUser).email_confirmed_at },
+    email: {
+      available: canSend(env),
+      address: e.email ?? null,
+      confirmed: !!e.email_confirmed_at,
+      // Which they get. An address is asked for before anything else; the demo has none and needs none.
+      weekly: !!e.email_weekly,
+      activity: !!e.activity_emails,
+      required: !user.is_demo && !e.email,
+      // When each last went out.
+      sent: { welcome: e.welcome_sent_at ?? null, weekly: e.weekly_sent_at ?? null, activity: lastNote?.t ?? null },
+    },
   };
 }
 
@@ -289,17 +302,22 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if ((path === '/auth/email/confirm' || path === '/auth/email/off') && (method === 'GET' || method === 'POST')) {
     const token = url.searchParams.get('t') ?? '';
     const confirm = path.endsWith('confirm');
+    // Turning off keeps the address: it stops the emails, and "only=activity" stops just the note after each activity.
+    const only = !confirm && url.searchParams.get('only') === 'activity';
     if (token && token !== 'preview') {
-      await env.DB.prepare(
-        confirm
-          ? `UPDATE users SET email_confirmed_at = COALESCE(email_confirmed_at, ?1) WHERE email_token = ?2`
-          : `UPDATE users SET email = NULL, email_confirmed_at = NULL, email_token = NULL WHERE email_token = ?2 AND ?1 > 0`,
-      )
-        .bind(now(), token)
-        .run();
+      await (confirm
+        ? env.DB.prepare(`UPDATE users SET email_confirmed_at = COALESCE(email_confirmed_at, ?) WHERE email_token = ?`).bind(now(), token)
+        : only
+          ? env.DB.prepare(`UPDATE users SET activity_emails = 0 WHERE email_token = ?`).bind(token)
+          : env.DB.prepare(`UPDATE users SET email_weekly = 0, activity_emails = 0 WHERE email_token = ?`).bind(token)
+      ).run();
     }
-    return redirect(`${env.BASE_PATH}/?email=${confirm ? 'confirmed' : 'off'}`);
+    return redirect(`${env.BASE_PATH}/?email=${confirm ? 'confirmed' : only ? 'sundays' : 'off'}`);
   }
+
+  // The picture of a route in an email. Mail apps fetch it without signing in; its link is signed instead.
+  const mapMatch = path.match(/^\/api\/map\/(-?\d+)-([0-9a-f]+)\.png$/);
+  if (mapMatch && method === 'GET') return serveMap(env, req, Number(mapMatch[1]), mapMatch[2], ctx);
 
   // Anything that changes state must come from our own pages.
   if (method !== 'GET' && req.headers.get('origin') !== url.origin) return json({ error: 'bad origin' }, 403);
@@ -347,32 +365,35 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (path === '/api/recent') return json(await recent(env, user));
 
   // Previews of the emails, built from this account's own data.
-  const emailMatch = path.match(/^\/api\/emails\/(welcome|weekly)(\/html)?$/);
+  const emailMatch = path.match(/^\/api\/emails\/(welcome|weekly|activity)(\/html)?$/);
   if (emailMatch && method === 'GET') {
     const variant = url.searchParams.get('variant');
     // Times in a preview follow the viewer's own timezone.
     let viewer = { ...(user as EmailUser), email_tz: (user as EmailUser).email_tz ?? url.searchParams.get('tz') };
-    // An account without pace data yet can't fill the patterns email, so that
-    // preview borrows the demo runner's data and says so.
+    // An account without pace data yet can't fill the patterns email, nor one without a run or ride with
+    // music the activity email, so those previews borrow the demo runner's data and say so.
     let example = false;
-    if (emailMatch[1] === 'weekly' && variant === 'patterns' && !(await hasPatterns(env, user))) {
+    const borrow = async () => {
       const demo = await env.DB.prepare(`SELECT * FROM users WHERE is_demo = 1`).first<EmailUser>();
-      if (demo) {
-        viewer = { ...demo, email_tz: viewer.email_tz, email_token: null };
-        example = true;
-      }
-    }
-    const email = await buildEmail(env, url.origin, viewer, emailMatch[1] as Kind, {
+      if (!demo) return false;
+      viewer = { ...demo, email_tz: viewer.email_tz, email_token: null };
+      return (example = true);
+    };
+    if (emailMatch[1] === 'weekly' && variant === 'patterns' && !(await hasPatterns(env, user))) await borrow();
+    const opts = {
       unit: url.searchParams.get('units') ?? undefined,
       variant: variant === 'collecting' || variant === 'patterns' ? (variant as Variant) : undefined,
-    });
+    };
+    let email = await buildEmail(env, url.origin, viewer, emailMatch[1] as Kind, opts);
+    if (!email && !example && (await borrow())) email = await buildEmail(env, url.origin, viewer, emailMatch[1] as Kind, opts);
+    if (!email) return json({ error: 'Nothing to show yet.' }, 404);
     if (emailMatch[2]) {
       // Shown in a sandboxed frame: email needs inline styles, which the app's own pages forbid.
       return new Response(email.html, {
         headers: {
           'content-type': 'text/html; charset=utf-8',
           'cache-control': 'no-store',
-          'content-security-policy': "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'",
+          'content-security-policy': "default-src 'none'; img-src https: data: 'self'; style-src 'unsafe-inline'",
         },
       });
     }
@@ -418,30 +439,40 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     return json({ ok: true });
   }
 
+  // The address, asked for at sign-up, and which emails go to it. Saved even while sending is off.
   if (path === '/api/email' && method === 'POST') {
-    if (!canSend(env)) return json({ error: 'Email updates are not switched on yet.' }, 503);
     const me = user as EmailUser;
-    const body = (await req.json().catch(() => ({}))) as { email?: string; tz?: string; units?: string };
+    const body = (await req.json().catch(() => ({}))) as { email?: string; tz?: string; units?: string; weekly?: boolean; activity?: boolean };
     const address = (body.email ?? '').trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || address.length > 254) return json({ error: 'That email address does not look right.' }, 400);
-    if (me.welcome_sent_at && now() - me.welcome_sent_at < 600 && address !== me.email) return json({ error: 'Please wait a few minutes before changing it again.' }, 429);
-    const token = randomToken(16);
     const changed = address !== me.email;
+    const settled = (me.welcome_sent_at ?? 0) < now() - 600;
+    if (changed && !settled) return json({ error: 'Please wait a few minutes before changing it again.' }, 429);
+    // A new address needs confirming, through a welcome email; so does one that never was, if its welcome is not just out.
+    const welcome = canSend(env) && (changed || (!me.email_confirmed_at && settled));
+    const token = changed || !me.email_token ? randomToken(16) : me.email_token;
+    const activity = !!body.activity;
     await env.DB.prepare(
-      `UPDATE users SET email = ?, email_token = ?, email_tz = ?, email_units = ?, welcome_sent_at = ?,
-         email_confirmed_at = CASE WHEN ? THEN NULL ELSE email_confirmed_at END WHERE id = ?`,
+      `UPDATE users SET email = ?1, email_token = ?2, email_tz = ?3, email_units = ?4,
+         email_weekly = ?5, activity_emails = ?6,
+         activity_emails_since = CASE WHEN ?6 AND NOT activity_emails THEN ?7 ELSE activity_emails_since END,
+         email_confirmed_at = CASE WHEN ?8 THEN NULL ELSE email_confirmed_at END WHERE id = ?9`,
     )
-      .bind(address, token, (body.tz ?? 'UTC').slice(0, 64), body.units === 'mi' ? 'mi' : 'km', now(), changed ? 1 : 0, user.id)
+      .bind(address, token, (body.tz ?? 'UTC').slice(0, 64), body.units === 'mi' ? 'mi' : 'km', body.weekly === false ? 0 : 1, activity ? 1 : 0, now(), changed ? 1 : 0, user.id)
       .run();
-    // The welcome email carries the confirm button; the roundup waits for it.
-    const fresh = { ...me, email: address, email_token: token };
-    const email = await buildEmail(env, url.origin, fresh, 'welcome');
-    await send(env, address, email, `${url.origin}${env.BASE_PATH}/auth/email/off?t=${token}`);
+    if (welcome) {
+      // The welcome email carries the confirm button; the others wait for it.
+      const email = await buildEmail(env, url.origin, { ...me, email: address, email_token: token, activity_emails: activity ? 1 : 0 }, 'welcome');
+      if (email && (await send(env, address, email, `${url.origin}${env.BASE_PATH}/auth/email/off?t=${token}`))) {
+        await env.DB.prepare(`UPDATE users SET welcome_sent_at = ? WHERE id = ?`).bind(now(), user.id).run();
+      }
+    }
     return json({ ok: true });
   }
 
+  // Turning emails off keeps the address.
   if (path === '/api/email' && method === 'DELETE') {
-    await env.DB.prepare(`UPDATE users SET email = NULL, email_confirmed_at = NULL, email_token = NULL WHERE id = ?`).bind(user.id).run();
+    await env.DB.prepare(`UPDATE users SET email_weekly = 0, activity_emails = 0 WHERE id = ?`).bind(user.id).run();
     return json({ ok: true });
   }
 
@@ -481,5 +512,6 @@ export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(syncAll(env));
     ctx.waitUntil(sendWeekly(env, env.PUBLIC_ORIGIN ?? 'https://www.garvitgupta.com').catch(console.error));
+    ctx.waitUntil(sendActivityEmails(env, env.PUBLIC_ORIGIN ?? 'https://www.garvitgupta.com').catch(console.error));
   },
 } satisfies ExportedHandler<Env>;
