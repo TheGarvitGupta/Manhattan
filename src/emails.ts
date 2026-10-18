@@ -211,7 +211,7 @@ function glyphTile(type: string, app: string): string {
         ? 'weight'
         : null;
   if (!key) return cover(null, kind(type), 44);
-  // Each kind has its own background colour, with the glyph in white: runs in
+  // Each kind has its own background color, with the glyph in white: runs in
   // Cadence violet, rides blue, weights orange.
   const tint = { run: '#6250d6', ride: '#2a78d6', weight: '#eb6834' }[key];
   return `<div style="width:44px;height:44px;border-radius:9px;background:${tint};text-align:center;"><img src="${esc(app)}glyphs/${key}.png" width="22" height="22" alt="${esc(kind(type))}" style="display:inline-block;margin-top:11px;border:0;"></div>`;
@@ -508,7 +508,7 @@ const SONGS_LISTED = 25;
 
 /**
  * The note after a run or ride: what was playing, song by song, on a map of
- * the route where each song's stretch of road wears its own colour, then how
+ * the route where each song's stretch of road wears its own color, then how
  * that sport is going (its findings, or how many more it needs).
  * Without `runId` it is the latest one with music, for previews. Null when there is none.
  */
@@ -558,7 +558,7 @@ async function activity(env: Env, origin: string, user: EmailUser, unit: string,
 ${lede(esc(`${run.name}, ${whenDated(run.start_time, user.email_tz)}: the fastest of ${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}.`))}`
     : `${kicker(when)}${headline(run.name)}${lede(esc(`${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}.`))}`;
 
-  // Each song's cover wears its colour on the map.
+  // Each song's cover wears its color on the map.
   const swatch = (x: ActivitySong, i: number) =>
     x.image
       ? `<img src="${esc(x.image)}" width="38" height="38" alt="" style="display:block;border:3px solid ${songColor(i)};border-radius:11px;">`
@@ -576,8 +576,8 @@ ${ins.most_played.length ? `${heading(`Most played on ${w.many}`)}${table(ins.mo
   const body = `
 ${
   map
-    ? `<a href="${esc(open)}" target="_blank" style="display:block;text-decoration:none;"><img src="${esc(map)}" width="500" alt="The route, with each song's stretch in its own colour" style="display:block;width:100%;height:auto;border:0;border-radius:16px;background:#eae8e3;"></a>
-<p style="margin:8px 0 22px;font:13px/1.5 ${FONT};color:${MUTED};">Each colour is a song, laid along the road where it played.</p>`
+    ? `<a href="${esc(open)}" target="_blank" style="display:block;text-decoration:none;"><img src="${esc(map)}" width="500" alt="The route, with each song's stretch in its own color" style="display:block;width:100%;height:auto;border:0;border-radius:16px;background:#eae8e3;"></a>
+<p style="margin:8px 0 22px;font:13px/1.5 ${FONT};color:${MUTED};">Each color is a song, laid along the road where it played.</p>`
     : ''
 }
 ${figures([

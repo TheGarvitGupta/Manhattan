@@ -1,5 +1,5 @@
 // The picture behind the front page: a runner crossing a playlist. The ground is the music, a row of leaning bars in each
-// song's colour, and its height is the pace: the faster the run, the higher it stands, so the line the runner leaves behind
+// song's color, and its height is the pace: the faster the run, the higher it stands, so the line the runner leaves behind
 // is the pace chart Cadence draws, with the songs underneath. Feet land on the beat. One song, the yellow one, is the fast one.
 // Nothing here is an image but the covers. It is one canvas, drawn a frame at a time, and it began as the Cadence card on
 // garvitgupta.com (js/cadence-tile.js there). Add ?freeze=14 to the address to hold it at 14 seconds.
@@ -17,7 +17,7 @@ export function scene(host, opts) {
 	var RX = 286;                 // where the runner is, across
 	var LEAN = Math.tan(11 * Math.PI / 180);   // the logo's bars lean this far
 	var YELLOW = "#ffd24a", WHITE = "#fcfcfb";
-	// The runner's headphones come in a different colour each time the page loads: the cup, and the band over the head.
+	// The runner's headphones come in a different color each time the page loads: the cup, and the band over the head.
 	var PODS = [
 		{ cup: "#8e5cf7", band: "#b08cff" },   // purple
 		{ cup: "#3f8fe0", band: "#8fc0f2" },   // blue
@@ -29,7 +29,7 @@ export function scene(host, opts) {
 	PODS = PODS[Math.floor(Math.random() * PODS.length)];
 
 	// The playlist, round and round: six places, and a cover dealt to each when the covers arrive. v is how fast the run goes
-	// to it (0 to 1), bpm sets the beat and so the stride, and hue colours its bars until the cover lends its own. The fourth is the fast one.
+	// to it (0 to 1), bpm sets the beat and so the stride, and hue colors its bars until the cover lends its own. The fourth is the fast one.
 	var SONGS = [
 		{ hue: 172, v: 0.30, bpm: 150, dur: 3.2 },
 		{ hue: 18, v: 0.46, bpm: 158, dur: 3.2 },
@@ -49,7 +49,7 @@ export function scene(host, opts) {
 		img.onload = function () {
 			s.img = img;
 			if (s.hot) return;
-			try {   // the cover's own colour, made pale, for the song's bars
+			try {   // the cover's own color, made pale, for the song's bars
 				var c = document.createElement("canvas").getContext("2d");
 				c.canvas.width = c.canvas.height = 8; c.drawImage(img, 0, 0, 8, 8);
 				var d = c.getImageData(0, 0, 8, 8).data, best = -1, hue = s.hue;
@@ -319,7 +319,7 @@ export function scene(host, opts) {
 		ctx.beginPath(); for (j = 0; j < ahead.length; j++) ctx.lineTo(ahead[j][0], ahead[j][1]); ctx.stroke();
 		ctx.setLineDash([]);
 
-		// the music: a bar every few steps, in its song's colour, lit once the runner has been over it
+		// the music: a bar every few steps, in its song's color, lit once the runner has been over it
 		k0 = Math.floor((now.cam - RX - 60) / SP);
 		for (j = k0; ; j++) {
 			sx = j * SP - now.cam + RX;

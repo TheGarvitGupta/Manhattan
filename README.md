@@ -116,7 +116,7 @@ from `Cadence <no-reply@cadence.garvitgupta.com>`:
   "Confirm my email" button; nothing else is sent until they tap it.
 - **After each run or ride** (if they asked): about 20 minutes after it ends,
   only if music was playing. The route on a map with each song's stretch in its
-  own colour, every song with its pace or speed, then that sport's findings (or
+  own color, every song with its pace or speed, then that sport's findings (or
   how many more activities it needs). The map is drawn by Mapbox's Static
   Images API and served through the Worker (`src/staticmap.ts`), on a signed
   link, so the token never appears in an email.

@@ -433,7 +433,7 @@ export function activityChart(container, act, fmt) {
 			const x0 = x(song.a);
 			const w = Math.max(3, x(song.b) - x0 - 2);
 			const bar = s('rect', { class: 'songbar', x: x0, y: songY, width: w, height: laneH, rx: Math.min(8, w / 2) });
-			// Each song wears the colour of its cover, here and on the map.
+			// Each song wears the color of its cover, here and on the map.
 			coverColor(song.image).then((color) => color && (bar.style.fill = color));
 			svg.append(bar);
 			const hasArt = !!song.image && w >= 30;
@@ -537,7 +537,7 @@ export function activityChart(container, act, fmt) {
 
 // --- route: where the activity went, and which song played where ------------------------
 
-// A colour for each song, taken from its cover: the strongest colour in it, kept bright enough to draw with.
+// A color for each song, taken from its cover: the strongest color in it, kept bright enough to draw with.
 const coverColors = new Map();
 export function coverColor(url) {
 	if (!url) return Promise.resolve(null);
@@ -577,7 +577,7 @@ export function coverColor(url) {
 					resolve(null);
 				}
 			};
-			// The small cover is plenty for a colour.
+			// The small cover is plenty for a color.
 			img.src = url.replace('ab67616d00001e02', 'ab67616d00004851');
 		}));
 	}
@@ -613,7 +613,7 @@ function decodeRoute(text) {
 // script or blob worker, so the page's content policy stays strict. The token is a public one; the server hands it over
 // with the account (it is a Worker secret, MAPBOX_TOKEN), so it is not written in the code.
 const MAP_STYLES = [
-	// The pale style, so the songs are the colour on the map.
+	// The pale style, so the songs are the color on the map.
 	['Standard', 'mapbox://styles/mapbox/light-v11'],
 	['Satellite', 'mapbox://styles/mapbox/satellite-v9'],
 	['Hybrid', 'mapbox://styles/mapbox/satellite-streets-v12'],
@@ -764,7 +764,7 @@ function routeLive(gl, container, polyline, act, streams, fmt) {
 	map.on('zoom', fit);
 	map.on('load', fit);
 
-	// Each song wears the colour of its cover.
+	// Each song wears the color of its cover.
 	Promise.all(songs.map((q) => coverColor(q.song.image).then((color) => {
 		if (!color) return;
 		q.color = color;
@@ -794,7 +794,7 @@ function routeLive(gl, container, polyline, act, streams, fmt) {
 }
 
 /**
- * The route with the songs laid along it. Each song colours the stretch of
+ * The route with the songs laid along it. Each song colors the stretch of
  * road it played over (violet where it was faster than the activity's average,
  * grey where slower) and its cover sits in the middle of that stretch. Road
  * with no music is a thin dashed line.

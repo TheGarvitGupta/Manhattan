@@ -1,17 +1,17 @@
 // The picture of a run or ride in its email: the route on a map, each song's
-// stretch of road in its own colour. Mail apps show no scripts, so Mapbox draws
+// stretch of road in its own color. Mail apps show no scripts, so Mapbox draws
 // it as an image (its Static Images API). Emails link to it here, through the
 // Worker, so the token stays out of them.
 
 import { Streams } from './match';
 import { Env, sha256Hex } from './util';
 
-// One colour per song, in the order they played, each different from the next.
+// One color per song, in the order they played, each different from the next.
 // Bright enough to stand out on the map's greens and blues.
 export const SONG_COLORS = ['#6250d6', '#ef5a3c', '#e8a000', '#d63e9e', '#0e9f8e', '#2f6fe0', '#f07d1a', '#8e44ad', '#c8283c', '#5a9e1a'];
 export const songColor = (i: number) => SONG_COLORS[i % SONG_COLORS.length];
 
-// Strava's colours for the map, as on the app's activity page: outdoors shows parks green and water blue.
+// Strava's colors for the map, as on the app's activity page: outdoors shows parks green and water blue.
 const STYLE = 'mapbox/outdoors-v12';
 export const MAP_WIDTH = 600;
 export const MAP_HEIGHT = 360;

@@ -395,7 +395,7 @@ function paceValue(speed, fmt, sport) {
 	return [value, h('small', null, ` ${unit}`)];
 }
 
-/** The same, led by an arrow: coloured and up when faster, grey and down when slower. */
+/** The same, led by an arrow: colored and up when faster, grey and down when slower. */
 function paceArrow(speed, average, fmt, sport) {
 	const text = paceGap(speed, average, fmt, sport);
 	if (text.startsWith('your usual')) return text;
@@ -1107,7 +1107,7 @@ function mailroom() {
 
 // --- admin -------------------------------------------------------------------------------------
 
-/** A small coloured label: 'ok' green, 'warn' amber, 'bad' red, or plain grey. */
+/** A small colored label: 'ok' green, 'warn' amber, 'bad' red, or plain grey. */
 const tag = (text, tone) => h('span', { class: `tag${tone ? ` ${tone}` : ''}` }, text);
 
 /** One service's connection for one person: its state, and when it was last checked or what went wrong. */

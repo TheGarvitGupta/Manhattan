@@ -10,9 +10,9 @@
 	--border: rgba(11, 11, 11, 0.1);
 	--wash: rgba(11, 11, 11, 0.04);
 	--band: rgba(11, 11, 11, 0.045);
-	/* Violet is the app's own colour: it sits apart from Strava orange and Spotify green. */
+	/* Violet is the app's own color: it sits apart from Strava orange and Spotify green. */
 	--accent: #6250d6;
-	/* Data colours: pace wears the accent; heart rate, power and cadence each get their own. */
+	/* Data colors: pace wears the accent; heart rate, power and cadence each get their own. */
 	--pace: var(--accent);
 	--heart: #eb6834;
 	--faster: var(--accent);
@@ -457,7 +457,7 @@ a.fact:hover .who b { text-decoration: underline; }
 
 .glyph-tile { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 8px; background: var(--wash); color: var(--ink-2); font-size: 14px; font-weight: 600; }
 .glyph { width: 19px; height: 19px; fill: currentColor; }
-/* Each kind of activity has its own background colour, with the glyph in white. */
+/* Each kind of activity has its own background color, with the glyph in white. */
 .glyph-tile.run { color: #fff; background: var(--accent); }
 .glyph-tile.ride { color: #fff; background: var(--power); }
 .glyph-tile.weight { color: #fff; background: var(--heart); }
