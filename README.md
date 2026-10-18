@@ -6,7 +6,7 @@ the music.
 
 Lives at `www.garvitgupta.com/cadence` as a Cloudflare Worker routed onto the
 main site. (This repo used to be called Manhattan; the 2020 Flask prototype is
-still in the root as `*.py`.)
+in git history before commit 6754ada.)
 
 ## How it works
 
@@ -35,6 +35,7 @@ src/insights.ts    the correlations
 public/cadence/    the front end (plain HTML/CSS/JS, no build step)
 migrations/        D1 schema
 scripts/simulate.ts  simulated runner for the demo
+brand/             logo, wordmark and contact card (not served)
 ```
 
 ## Run it locally
