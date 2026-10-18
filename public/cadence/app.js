@@ -806,12 +806,10 @@ function latest(fmt) {
 /** Five records on a line: one for each run (or ride) with music, wearing a cover from it. The fifth unlocks the patterns. */
 function collecting(sport, have) {
 	const w = WORDS[sport];
-	const seconds = (a) => a.songs.reduce((sum, s) => sum + (s.to - s.from), 0);
-	// The ones that counted had music for at least half of them; those come first, fullest first, then they are put in order of date.
-	const share = (a) => seconds(a) / Math.max(1, a.elapsed_s);
+	// Every one with a song counted; the latest of them, in order of date.
 	const counted = state.recent.activities
 		.filter((a) => sportOf(a.type) === sport && a.songs.length)
-		.sort((a, b) => (share(b) >= 0.5) - (share(a) >= 0.5) || share(b) - share(a))
+		.sort((a, b) => b.start_time - a.start_time)
 		.slice(0, have)
 		.sort((a, b) => a.start_time - b.start_time);
 	const cover = (a) => a && [...a.songs].sort((x, y) => y.to - y.from - (x.to - x.from)).find((s) => s.image)?.image;

@@ -289,6 +289,8 @@ export async function buildInsights(env: Env, user: User, sport: Sport = 'run') 
   const withMusic = everyRun.filter((r) => r.music_s >= 0.5 * r.moving_s);
   const silent = everyRun.filter((r) => user.spotify_since != null && r.start_time >= user.spotify_since && r.music_s < 0.05 * r.moving_s);
   const music = withMusic.length >= 2 && silent.length >= 2 ? { with: group(withMusic), without: group(silent) } : null;
+  // What counts towards the five: any run a song was matched to, as the activity list shows it.
+  const withSongs = everyRun.filter((r) => r.songs > 0);
 
   const pair = (a: Bucket, b: Bucket) => (a.moving >= 600 && b.moving >= 600 ? [a.summary(), b.summary()] : null);
   const fam = pair(fresh, familiar);
@@ -303,7 +305,7 @@ export async function buildInsights(env: Env, user: User, sport: Sport = 'run') 
     sport,
     totals: {
       runs: runs.length,
-      runs_with_music: withMusic.length,
+      runs_with_music: withSongs.length,
       distance_m: runs.reduce((a, r) => a + r.distance_m, 0),
       moving_s: runs.reduce((a, r) => a + r.moving_s, 0),
       music_s: Math.round(everyRun.reduce((a, r) => a + r.music_s, 0)),
