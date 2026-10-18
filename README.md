@@ -115,11 +115,15 @@ from `Cadence <no-reply@cadence.garvitgupta.com>`:
 - **Welcome**: once, when someone gives an address. It carries the
   "Confirm my email" button; nothing else is sent until they tap it.
 - **After each run or ride** (if they asked): about 20 minutes after it ends,
-  only if music was playing. The route on a map with each song's stretch in its
-  own color, every song with its pace or speed, then that sport's findings (or
-  how many more activities it needs). The map is drawn by Mapbox's Static
-  Images API and served through the Worker (`src/staticmap.ts`), on a signed
-  link, so the token never appears in an email.
+  only if music was playing. Laid out like the app's activity page: its
+  figures, the route on a map with each song's stretch in its cover's color and
+  covers pinned along it, when each song played, and the songs fastest to
+  slowest; then that sport's findings (or how many more activities it needs),
+  and the week at the bottom. The map is drawn by Mapbox's Static Images API and
+  served through the Worker (`src/staticmap.ts`), on a signed link, so the
+  token never appears in an email. Cover colors and the framed pins are made
+  from the covers themselves (`src/covers.ts`), colors cached in `cover_colors`.
+  Emails go out on their own schedule, five minutes after each sync.
 - **Sunday roundup**: 9am every Sunday in the reader's timezone. Their last 10
   songs and last 10 runs and rides (each with its songs) while Cadence is still collecting, or the top findings
   once there are five runs with music. Biking joins the same email on the same

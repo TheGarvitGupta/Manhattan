@@ -1,15 +1,11 @@
 // The picture of a run or ride in its email: the route on a map, each song's
-// stretch of road in its own color. Mail apps show no scripts, so Mapbox draws
+// stretch of road in its cover's color, with the covers pinned where they fit. Mail apps show no scripts, so Mapbox draws
 // it as an image (its Static Images API). Emails link to it here, through the
 // Worker, so the token stays out of them.
 
+import { coverColors, NO_COVER, pinLink } from './covers';
 import { Streams } from './match';
 import { Env, sha256Hex } from './util';
-
-// One color per song, in the order they played, each different from the next.
-// Bright enough to stand out on the map's greens and blues.
-export const SONG_COLORS = ['#6250d6', '#ef5a3c', '#e8a000', '#d63e9e', '#0e9f8e', '#2f6fe0', '#f07d1a', '#8e44ad', '#c8283c', '#5a9e1a'];
-export const songColor = (i: number) => SONG_COLORS[i % SONG_COLORS.length];
 
 // Strava's colors for the map, as on the app's activity page: outdoors shows parks green and water blue.
 const STYLE = 'mapbox/outdoors-v12';
@@ -116,7 +112,15 @@ function interp(xs: number[], ys: number[], x: number): number {
 export interface MapSong {
   start_s: number;
   end_s: number;
+  color: string;
+  // Its framed cover, to pin where it played when there is room.
+  pin: string | null;
 }
+
+// A cover is pinned where its stretch is this long on the map, and no closer than this to another (CSS pixels).
+const PIN_ROOM = 38;
+const PIN_APART = 30;
+const PAD = 36;
 
 /**
  * The Mapbox address for the route with its songs on it. The route has no
@@ -124,10 +128,19 @@ export interface MapSong {
  * activity was when it began and ended, as a share of the whole, as on the
  * app's map. Null when there is no route to draw.
  */
-export function mapboxUrl(token: string, polyline: string, streams: Streams | null, songs: MapSong[]): string | null {
+export function mapboxUrl(token: string, polyline: string, streams: Streams | null, songs: MapSong[], pins = true): string | null {
   const full = decode(polyline);
   if (full.length < 2) return null;
   const total = streams && streams.t.length > 1 ? streams.d[streams.d.length - 1] : 0;
+
+  // Roughly how many CSS pixels a metre will be once Mapbox has fitted the route, to know where a cover has room.
+  const lats = full.map((p) => p[0]);
+  const lngs = full.map((p) => p[1]);
+  const [south, north, west, east] = [Math.min(...lats), Math.max(...lats), Math.min(...lngs), Math.max(...lngs)];
+  const wide = metres([south, west], [south, east]) || 1;
+  const tall = metres([south, west], [north, west]) || 1;
+  const scale = Math.min((MAP_WIDTH - 2 * PAD) / wide, (MAP_HEIGHT - 2 * PAD) / tall);
+  const screen = (p: Point): [number, number] => [metres([p[0], west], p) * Math.sign(p[1] - west) * scale, metres([south, p[1]], p) * Math.sign(p[0] - south) * scale];
 
   // A long route is drawn with fewer points until the address fits.
   for (const tolerance of [0, 3, 6, 12, 25, 50, 100, 200]) {
@@ -146,19 +159,33 @@ export function mapboxUrl(token: string, polyline: string, streams: Streams | nu
 
     const path = (width: number, color: string, points: Point[], opacity = 1) =>
       `path-${width}+${color.slice(1)}-${opacity}(${encodeURIComponent(encode(points))})`;
-    // Overlays are laid in order: a white edge under the whole route, the route in grey, then the songs.
-    const overlays = [path(9, '#ffffff', route, 0.95), path(3, '#77736b', route, 0.8)];
+    // Overlays are laid in order: the road without music thin and grey on a white edge, then the songs, then their covers.
+    const overlays = [path(7, '#ffffff', route, 0.9), path(2.5, '#4a4a48', route, 0.7)];
+    const markers: string[] = [];
+    const placed: [number, number][] = [];
     if (total > 0) {
-      songs.forEach((song, i) => {
-        const from = (interp(streams!.t, streams!.d, song.start_s) / total) * length;
-        const to = (interp(streams!.t, streams!.d, song.end_s) / total) * length;
-        if (to - from >= 1) overlays.push(path(6, songColor(i), stretch(from, to)));
-      });
+      const stretches = songs
+        .map((song) => ({
+          song,
+          from: (interp(streams!.t, streams!.d, song.start_s) / total) * length,
+          to: (interp(streams!.t, streams!.d, song.end_s) / total) * length,
+        }))
+        .filter((x) => x.to - x.from >= 1);
+      for (const x of stretches) overlays.push(path(6, x.song.color, stretch(x.from, x.to)));
+      // The longest stretches are pinned first, so the covers that fit are the songs that played longest.
+      for (const x of [...stretches].sort((a, b) => b.to - b.from - (a.to - a.from))) {
+        if (!pins || !x.song.pin || (x.to - x.from) * scale < PIN_ROOM) continue;
+        const mid = at((x.from + x.to) / 2);
+        const [sx, sy] = screen(mid);
+        if (placed.some(([px, py]) => Math.hypot(px - sx, py - sy) < PIN_APART)) continue;
+        placed.push([sx, sy]);
+        markers.push(`url-${encodeURIComponent(x.song.pin)}(${mid[1].toFixed(5)},${mid[0].toFixed(5)})`);
+      }
     }
-    const url = `https://api.mapbox.com/styles/v1/${STYLE}/static/${overlays.join(',')}/auto/${MAP_WIDTH}x${MAP_HEIGHT}@2x?padding=36&access_token=${encodeURIComponent(token)}`;
+    const url = `https://api.mapbox.com/styles/v1/${STYLE}/static/${[...overlays, ...markers].join(',')}/auto/${MAP_WIDTH}x${MAP_HEIGHT}@2x?padding=${PAD}&access_token=${encodeURIComponent(token)}`;
     if (url.length <= MAX_URL) return url;
   }
-  return null;
+  return pins ? mapboxUrl(token, polyline, streams, songs, false) : null;
 }
 
 // --- the address in the email ------------------------------------------------------
@@ -168,9 +195,12 @@ async function signature(env: Env, runId: number): Promise<string> {
   return (await sha256Hex(`map:${runId}:${env.TOKEN_KEY}`)).slice(0, 24);
 }
 
+// Raised whenever the map is drawn differently, so pictures already cached are drawn again.
+const DESIGN = 2;
+
 /** `songs` only tells caches apart: a run that gains a late song gets a new picture. */
 export async function mapLink(env: Env, origin: string, runId: number, songs: number): Promise<string> {
-  return `${origin}${env.BASE_PATH}/api/map/${runId}-${await signature(env, runId)}.png?v=${songs}`;
+  return `${origin}${env.BASE_PATH}/api/map/${runId}-${await signature(env, runId)}.png?v=${songs}&d=${DESIGN}`;
 }
 
 /** Serves /api/map/<run>-<signature>.png: the picture, made once and kept. */
@@ -187,12 +217,32 @@ export async function serveMap(env: Env, req: Request, runId: number, sig: strin
     .bind(runId)
     .first<{ streams: string | null; polyline: string | null }>();
   if (!run?.polyline) return new Response('not found', { status: 404 });
-  const songs = await env.DB.prepare(`SELECT start_s, end_s FROM run_songs WHERE run_id = ? ORDER BY idx`).bind(runId).all<MapSong>();
-  const url = mapboxUrl(env.MAPBOX_TOKEN, run.polyline, run.streams ? (JSON.parse(run.streams) as Streams) : null, songs.results);
-  if (!url) return new Response('not found', { status: 404 });
+  const rows = (
+    await env.DB.prepare(`SELECT rs.start_s, rs.end_s, t.image FROM run_songs rs JOIN tracks t ON t.id = rs.track_id WHERE rs.run_id = ? ORDER BY rs.idx`)
+      .bind(runId)
+      .all<{ start_s: number; end_s: number; image: string | null }>()
+  ).results;
+  // The same colors as the email that links here, worked out when it was written.
+  const { colors } = await coverColors(env, rows.map((r) => r.image));
+  // Mapbox fetches the pins from the live site, so a map drawn anywhere else goes without them.
+  const origin = env.PUBLIC_ORIGIN ?? new URL(req.url).origin;
+  const songs: MapSong[] = await Promise.all(
+    rows.map(async (r) => {
+      const color = (r.image && colors.get(r.image)) || NO_COVER;
+      return { start_s: r.start_s, end_s: r.end_s, color, pin: r.image ? await pinLink(env, origin, r.image, color) : null };
+    }),
+  );
+  const streams = run.streams ? (JSON.parse(run.streams) as Streams) : null;
 
   // The token may be limited to the site's own pages, so the request says it comes from there.
-  const image = await fetch(url, { headers: { referer: `${env.PUBLIC_ORIGIN ?? new URL(req.url).origin}${env.BASE_PATH}/` } });
+  const draw = (url: string | null) => (url ? fetch(url, { headers: { referer: `${origin}${env.BASE_PATH}/` } }) : null);
+  let image = await draw(mapboxUrl(env.MAPBOX_TOKEN, run.polyline, streams, songs));
+  // Mapbox refuses the whole map when it can't fetch a pin, so then it is drawn without them.
+  if (image && !image.ok) {
+    console.error(`map ${runId}: Mapbox said ${image.status} ${(await image.text()).slice(0, 200)}; drawing it without covers`);
+    image = await draw(mapboxUrl(env.MAPBOX_TOKEN, run.polyline, streams, songs, false));
+  }
+  if (!image) return new Response('not found', { status: 404 });
   if (!image.ok) {
     console.error(`map ${runId}: Mapbox said ${image.status} ${(await image.text()).slice(0, 200)}`);
     return new Response('map unavailable', { status: 502 });

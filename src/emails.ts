@@ -13,7 +13,8 @@
 import { buildInsights } from './insights';
 import { songIntervals } from './match';
 import { RIDE_TYPES, Sport, SPORTS } from './providers';
-import { mapLink, songColor } from './staticmap';
+import { coverColors, NO_COVER } from './covers';
+import { mapLink } from './staticmap';
 import { Env, now, recast, User } from './util';
 
 export const FROM = { email: 'no-reply@cadence.garvitgupta.com', name: 'Cadence' };
@@ -487,8 +488,10 @@ interface ActivityRun {
   sport: Sport;
   type: string | null;
   start_time: number;
+  elapsed_s: number;
   distance_m: number;
   moving_s: number;
+  avg_hr: number | null;
   polyline: string | null;
 }
 
@@ -516,7 +519,7 @@ async function activity(env: Env, origin: string, user: EmailUser, unit: string,
   const l = links(env, origin, user);
   const u = units(unit);
   const run = await env.DB.prepare(
-    `SELECT r.id, r.strava_id, r.name, r.sport, r.start_time, r.distance_m, r.moving_s, a.type, a.polyline
+    `SELECT r.id, r.strava_id, r.name, r.sport, r.start_time, r.elapsed_s, r.distance_m, r.moving_s, r.avg_hr, a.type, a.polyline
      FROM runs r LEFT JOIN activities a ON a.user_id = r.user_id AND a.strava_id = r.strava_id
      WHERE r.user_id = ?1 AND r.stream_state = 'ok' AND (?2 IS NULL OR r.id = ?2) AND EXISTS (SELECT 1 FROM run_songs WHERE run_id = r.id)
      ORDER BY r.start_time DESC LIMIT 1`,
@@ -549,7 +552,7 @@ async function activity(env: Env, origin: string, user: EmailUser, unit: string,
   const map = run.polyline && env.MAPBOX_TOKEN ? await mapLink(env, origin, run.id, songs.length) : null;
   const open = `${l.app}#/activity/${run.strava_id}`;
 
-  const gap = (x: ActivitySong) => u.against(speedOf(x), average, s).replace('than your average', `than this ${w.one}`).replace('your usual', `this ${w.one}'s usual`);
+  const gap = (x: ActivitySong) => u.against(speedOf(x), average, s).replace('than your average', `than this ${w.one}'s average`).replace('your usual', `this ${w.one}'s usual`);
   const did = w.verb === 'run' ? 'ran' : 'rode';
   const when = `${kind(run.type ?? (s === 'ride' ? 'Ride' : 'Run'))} · ${whenDated(run.start_time, user.email_tz)}`;
   // Led by its fastest song, as the Sunday roundup is by the person's; without one, by the activity's name.
@@ -558,12 +561,77 @@ async function activity(env: Env, origin: string, user: EmailUser, unit: string,
 ${lede(esc(`${run.name}, ${whenDated(run.start_time, user.email_tz)}: the fastest of ${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}.`))}`
     : `${kicker(when)}${headline(run.name)}${lede(esc(`${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}.`))}`;
 
-  // Each song's cover wears its color on the map.
-  const swatch = (x: ActivitySong, i: number) =>
+  // Each song wears its cover's color, as on the app's map: on the map, in the strip and around its cover below.
+  // An email being sent waits until every cover has one, so the email and its map agree; a preview makes do.
+  const { colors, complete } = await coverColors(env, songs.map((x) => x.image), { n: 25 });
+  if (runId != null && !complete) throw new Error('cover colors still being worked out');
+  const colorOf = (x: { image: string | null }) => (x.image && colors.get(x.image)) || NO_COVER;
+  const tz = user.email_tz || 'UTC';
+  const clock = (ts: number) => new Date(ts * 1000).toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+  const music = songs.reduce((sum, x) => sum + (x.end_s - x.start_s), 0);
+  const heard = Math.min(run.distance_m, songs.reduce((sum, x) => sum + x.distance_m, 0));
+
+  // The head of the app's activity page: whose it was, when, and its figures in a line.
+  const tint = s === 'ride' ? '#2a78d6' : ACCENT;
+  const face = user.avatar
+    ? `<img src="${esc(user.avatar)}" width="56" height="56" alt="" style="display:block;border-radius:28px;border:3px solid ${tint};">`
+    : glyphTile(run.type ?? (s === 'ride' ? 'Ride' : 'Run'), l.app);
+  const fact = (value: string, label: string) =>
+    `<span style="display:inline-block;margin:0 18px 6px 0;white-space:nowrap;font:15px/1.3 ${FONT};color:${SOFT};"><b style="font:700 20px/1.3 ${FONT};color:${INK};letter-spacing:-0.01em;">${esc(value)}</b> ${esc(label)}</span>`;
+  const head = `
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;"><tr>
+  <td width="62" valign="top" style="padding:2px 14px 0 0;">${face}</td>
+  <td valign="top">
+    <p style="margin:0;font:800 22px/1.25 ${FONT};color:${INK};letter-spacing:-0.02em;">${esc(run.name)}</p>
+    <p style="margin:2px 0 12px;font:14px/1.4 ${FONT};color:${SOFT};">${esc(`${new Date(run.start_time * 1000).toLocaleDateString('en-US', { timeZone: tz, weekday: 'long', month: 'short', day: 'numeric' })}, ${clock(run.start_time)} – ${clock(run.start_time + run.elapsed_s)}`)}</p>
+    ${fact(u.dist(run.distance_m), 'distance')}${fact(length(run.moving_s), 'moving')}${fact(u.rate(average, s), s === 'ride' ? 'average speed' : 'average pace')}${run.avg_hr ? fact(`${Math.round(run.avg_hr)} bpm`, 'average heart rate') : ''}${fact(length(music), 'of music')}
+  </td>
+</tr></table>`;
+
+  // When each song played, as a strip from start to finish: a bar of its color for each, the gaps left pale.
+  const spans = [...songs].sort((a, b) => a.start_s - b.start_s);
+  const cells: string[] = [];
+  let upTo = 0;
+  const cell = (seconds: number, color: string | null) => {
+    const width = Math.max(color ? 0.4 : 0, (seconds / Math.max(1, run.elapsed_s)) * 100);
+    if (width > 0.05) cells.push(`<td width="${width.toFixed(2)}%" style="height:26px;${color ? `background:${color};` : ''}font-size:0;line-height:0;">&nbsp;</td>`);
+  };
+  for (const x of spans) {
+    const from = Math.max(upTo, x.start_s);
+    cell(from - upTo, null);
+    cell(Math.max(0, x.end_s - from), colorOf(x));
+    upTo = Math.max(upTo, x.end_s);
+  }
+  cell(run.elapsed_s - upTo, null);
+  const strip = `
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 4px;"><tr>
+  <td style="font:12px ${FONT};color:${MUTED};">${esc(clock(run.start_time))}</td>
+  <td align="right" style="font:12px ${FONT};color:${MUTED};">${esc(clock(run.start_time + run.elapsed_s))}</td>
+</tr></table>
+<div style="border-radius:8px;overflow:hidden;background:#efeee9;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;border-collapse:collapse;background:#efeee9;"><tr>${cells.join('')}</tr></table>
+</div>`;
+
+  // Fastest to slowest, as on the app: a song that played more than once is counted once, its plays added together.
+  const bySong = new Map<string, { name: string; artist: string; image: string | null; plays: number; seconds: number; distance: number; moving: number }>();
+  for (const x of songs) {
+    const key = `${x.name}|${x.artist}`;
+    const r = bySong.get(key) ?? { name: x.name, artist: x.artist, image: x.image, plays: 0, seconds: 0, distance: 0, moving: 0 };
+    r.plays++;
+    r.seconds += x.end_s - x.start_s;
+    r.distance += x.distance_m;
+    r.moving += x.moving_s;
+    bySong.set(key, r);
+  }
+  const ranked = [...bySong.values()]
+    .map((r) => ({ ...r, speed: r.moving >= 5 && r.distance > 0 ? r.distance / r.moving : null }))
+    .sort((a, b) => (b.speed ?? -1) - (a.speed ?? -1));
+  const listed = ranked.slice(0, SONGS_LISTED);
+  const framed = (x: { image: string | null; name: string }) =>
     x.image
-      ? `<img src="${esc(x.image)}" width="38" height="38" alt="" style="display:block;border:3px solid ${songColor(i)};border-radius:11px;">`
-      : `<div style="width:38px;height:38px;border:3px solid ${songColor(i)};border-radius:11px;background:#eeede8;color:${MUTED};font:600 16px/38px ${FONT};text-align:center;">${esc((x.name || '?')[0])}</div>`;
-  const listed = songs.slice(0, SONGS_LISTED);
+      ? `<img src="${esc(x.image)}" width="38" height="38" alt="" style="display:block;border:3px solid ${colorOf(x)};border-radius:11px;">`
+      : `<div style="width:38px;height:38px;border:3px solid ${colorOf(x)};border-radius:11px;background:#eeede8;color:${MUTED};font:600 16px/38px ${FONT};text-align:center;">${esc((x.name || '?')[0])}</div>`;
+  const versus = (speed: number) => u.against(speed, average, s).replace(' than your average', '').replace('your usual', 'usual');
 
   const progress =
     have >= RUNS_NEEDED && ins.fastest.length
@@ -574,23 +642,21 @@ ${para(esc(`${Math.min(have, RUNS_NEEDED - 1)} of ${RUNS_NEEDED} ${w.many} with 
 ${ins.most_played.length ? `${heading(`Most played on ${w.many}`)}${table(ins.most_played.slice(0, 3).map((x) => row(x.image, x.name, x.artist, `${x.plays}×`, `on ${plural(x.runs, w.one)}`)).join(''))}` : ''}`;
 
   const body = `
+${head}
 ${
   map
-    ? `<a href="${esc(open)}" target="_blank" style="display:block;text-decoration:none;"><img src="${esc(map)}" width="500" alt="The route, with each song's stretch in its own color" style="display:block;width:100%;height:auto;border:0;border-radius:16px;background:#eae8e3;"></a>
-<p style="margin:8px 0 22px;font:13px/1.5 ${FONT};color:${MUTED};">Each color is a song, laid along the road where it played.</p>`
+    ? `<a href="${esc(open)}" target="_blank" style="display:block;text-decoration:none;"><img src="${esc(map)}" width="500" alt="The route, with each song's stretch in the color of its cover" style="display:block;width:100%;height:auto;border:0;border-radius:16px;background:#eae8e3;"></a>`
     : ''
 }
-${figures([
-  [u.dist(run.distance_m), s === 'ride' ? 'ridden' : 'run'],
-  [length(run.moving_s), 'moving'],
-  [u.rate(average, s), s === 'ride' ? 'average speed' : 'average pace'],
-])}
-${heading('What was playing')}
-${table(listed.map((x, i) => row(null, x.name, `${x.artist} · at ${minSec(x.start_s)}${x.skipped ? ' · cut short' : ''}`, u.rate(speedOf(x), s), gap(x).replace(` than this ${w.one}`, ''), swatch(x, i))).join(''))}
-${songs.length > listed.length ? para(esc(`And ${plural(songs.length - listed.length, 'more song')}, on the site.`)) : ''}
+<p style="margin:10px 0 18px;font:14px/1.5 ${FONT};color:${SOFT};">${esc(`Music played over ${u.dist(heard)} of ${u.dist(run.distance_m)}.${map ? ' The map shows where on the road each song played; the strip below shows when.' : ''}`)}</p>
+${strip}
+${heading('Fastest to slowest')}
+<p style="margin:-2px 0 8px;font:13px/1.5 ${FONT};color:${MUTED};">${esc(`Your ${s === 'ride' ? 'speed' : 'pace'} while each song played.`)}</p>
+${table(listed.map((x) => row(null, x.name, `${x.artist} · ${minSec(x.seconds)}${x.plays > 1 ? ` · ${x.plays} times` : ''}`, x.speed ? u.rate(x.speed, s) : '–', x.speed ? versus(x.speed) : '', framed(x))).join(''))}
+${ranked.length > listed.length ? para(esc(`And ${plural(ranked.length - listed.length, 'more song')}, on the site.`)) : ''}
 ${button(open, `Open this ${w.one}`)}
-${t.runs + t.rides ? `${heading('This week')}${figures(weekTiles)}` : ''}
-${progress}`;
+${progress}
+${t.runs + t.rides ? `${heading('This week')}${figures(weekTiles)}` : ''}`;
 
   const subject = fastest ? `${run.name}: you ${did} fastest to ${fastest.name}` : `${run.name}: ${plural(songs.length, 'song')}`;
   const preview = `${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}. ${weekLine}`;
@@ -599,9 +665,9 @@ ${progress}`;
     subject,
     preview,
     html: shell(subject, hero, body, preview, footer, l.app),
-    text: `${run.name}, ${whenDated(run.start_time, user.email_tz)}\n${u.dist(run.distance_m)} · ${length(run.moving_s)} · ${u.rate(average, s)}\n\n${
+    text: `${run.name}, ${whenDated(run.start_time, user.email_tz)}\n${u.dist(run.distance_m)} · ${length(run.moving_s)} · ${u.rate(average, s)} · ${length(music)} of music\n\n${
       fastest ? `Fastest song: ${fastest.name} by ${fastest.artist}, ${u.rate(speedOf(fastest), s)}.\n\n` : ''
-    }What was playing:\n${songs.map((x) => `- ${x.name} · ${x.artist}: ${u.rate(speedOf(x), s)}`).join('\n')}\n\n${weekLine}\n${
+    }Fastest to slowest:\n${ranked.map((x) => `- ${x.name} · ${x.artist}: ${x.speed ? u.rate(x.speed, s) : '–'}`).join('\n')}\n\n${weekLine}\n${
       have >= RUNS_NEEDED ? '' : `${Math.min(have, RUNS_NEEDED - 1)} of ${RUNS_NEEDED} ${w.many} with music so far.\n`
     }\nOpen this ${w.one}: ${open}\nJust Sundays, please: ${l.offActivity}\nTurn all emails off: ${l.off}`,
   };
@@ -723,7 +789,7 @@ export async function sendWeekly(env: Env, origin: string): Promise<void> {
 // Songs land with Spotify when they finish and are fetched every ten minutes, so a run is written up this long after it ends.
 const SETTLE_S = 20 * 60;
 
-/** Cron step: the note after each run or ride with music, once each, to those who asked for it. */
+/** Cron step: the note after each run or ride with music, once each, to those who asked for it. One at a time: each may fetch a few dozen covers. */
 export async function sendActivityEmails(env: Env, origin: string): Promise<void> {
   if (!canSend(env)) return;
   const due = await env.DB.prepare(
@@ -733,7 +799,7 @@ export async function sendActivityEmails(env: Env, origin: string): Promise<void
        AND r.start_time >= COALESCE(u.activity_emails_since, 0) AND r.start_time > ?1 - 2 * 86400
        AND r.start_time + r.elapsed_s < ?1 - ?2
        AND EXISTS (SELECT 1 FROM run_songs WHERE run_id = r.id)
-     ORDER BY r.start_time LIMIT 5`,
+     ORDER BY r.start_time LIMIT 1`,
   )
     .bind(now(), SETTLE_S)
     .all<EmailUser & { run_id: number }>();

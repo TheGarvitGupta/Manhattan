@@ -5,6 +5,7 @@ import { accessRequestEmail, buildEmail, canSend, EmailUser, FROM, hasPatterns, 
 import { buildInsights } from './insights';
 import { SongInterval, songIntervals } from './match';
 import { accessToken, authorizeUrl, exchangeSpotifyCode, exchangeStravaCode, Provider, saveTokens, Sport, stravaDeauthorize } from './providers';
+import { servePin } from './covers';
 import { serveMap } from './staticmap';
 import { syncAll, syncUser } from './sync';
 import { Env, getCookie, json, now, randomToken, recast, redirect, setCookie, sha256Hex, User } from './util';
@@ -13,6 +14,8 @@ const SESSION_COOKIE = 'cadence_sid';
 const STATE_COOKIE = 'cadence_oauth';
 const SESSION_TTL = 30 * 86400;
 const DEMO_ATHLETE_ID = -1;
+// The schedule the emails go out on; it must match the second cron in wrangler.jsonc.
+const EMAIL_CRON = '5-59/10 * * * *';
 
 async function currentUser(req: Request, env: Env): Promise<User | null> {
   const sid = getCookie(req, SESSION_COOKIE);
@@ -349,6 +352,8 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   // The picture of a route in an email. Mail apps fetch it without signing in; its link is signed instead.
   const mapMatch = path.match(/^\/api\/map\/(-?\d+)-([0-9a-f]+)\.png$/);
   if (mapMatch && method === 'GET') return serveMap(env, req, Number(mapMatch[1]), mapMatch[2], ctx);
+  // A framed cover for one of those maps; Mapbox fetches it, by a signed link.
+  if (path === '/api/pin.png' && method === 'GET') return servePin(env, req, ctx);
 
   // Anything that changes state must come from our own pages.
   if (method !== 'GET' && req.headers.get('origin') !== url.origin) return json({ error: 'bad origin' }, 403);
@@ -541,9 +546,14 @@ export default {
     }
   },
 
-  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(syncAll(env));
-    ctx.waitUntil(sendWeekly(env, env.PUBLIC_ORIGIN ?? 'https://www.garvitgupta.com').catch(console.error));
-    ctx.waitUntil(sendActivityEmails(env, env.PUBLIC_ORIGIN ?? 'https://www.garvitgupta.com').catch(console.error));
+  // Two schedules (wrangler.jsonc): syncing on the tens, and emails five minutes later, each with its own allowance of requests.
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === EMAIL_CRON) {
+      const origin = env.PUBLIC_ORIGIN ?? 'https://www.garvitgupta.com';
+      ctx.waitUntil(sendWeekly(env, origin).catch(console.error));
+      ctx.waitUntil(sendActivityEmails(env, origin).catch(console.error));
+    } else {
+      ctx.waitUntil(syncAll(env));
+    }
   },
 } satisfies ExportedHandler<Env>;

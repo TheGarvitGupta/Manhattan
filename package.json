@@ -20,5 +20,8 @@
   "allowScripts": {
     "workerd@1.20261006.1": true,
     "esbuild@0.28.2": true
+  },
+  "dependencies": {
+    "jpeg-js": "^0.4.4"
   }
 }
