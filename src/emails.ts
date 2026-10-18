@@ -493,6 +493,7 @@ interface ActivityRun {
   moving_s: number;
   avg_hr: number | null;
   polyline: string | null;
+  streams: string | null;
 }
 
 interface ActivitySong {
@@ -519,7 +520,7 @@ async function activity(env: Env, origin: string, user: EmailUser, unit: string,
   const l = links(env, origin, user);
   const u = units(unit);
   const run = await env.DB.prepare(
-    `SELECT r.id, r.strava_id, r.name, r.sport, r.start_time, r.elapsed_s, r.distance_m, r.moving_s, r.avg_hr, a.type, a.polyline
+    `SELECT r.id, r.strava_id, r.name, r.sport, r.start_time, r.elapsed_s, r.distance_m, r.moving_s, r.avg_hr, a.type, a.polyline, r.streams
      FROM runs r LEFT JOIN activities a ON a.user_id = r.user_id AND a.strava_id = r.strava_id
      WHERE r.user_id = ?1 AND r.stream_state = 'ok' AND (?2 IS NULL OR r.id = ?2) AND EXISTS (SELECT 1 FROM run_songs WHERE run_id = r.id)
      ORDER BY r.start_time DESC LIMIT 1`,
@@ -541,10 +542,34 @@ async function activity(env: Env, origin: string, user: EmailUser, unit: string,
   );
   const s = run.sport;
   const w = WORDS[s];
-  const speedOf = (x: { distance_m: number; moving_s: number }) => (x.moving_s > 0 ? x.distance_m / x.moving_s : 0);
-  const average = speedOf(run);
-  // The fastest song is one that had a minute or more of moving, so a few seconds at a light don't win it.
-  const fastest = songs.filter((x) => x.moving_s >= 60).sort((a, b) => speedOf(b) - speedOf(a))[0] ?? null;
+  // Distance and moving time from the per-second data where there is some, as the app's page reads them; Strava's own moving time counts more.
+  const streams = run.streams ? (JSON.parse(run.streams) as { d: number[]; m: number[]; hr: (number | null)[] | null }) : null;
+  const beats = (streams?.hr ?? []).filter((x): x is number => x != null);
+  const heartRate = beats.length ? beats.reduce((a, x) => a + x, 0) / beats.length : run.avg_hr;
+  const whole =
+    streams && streams.m.length > 1 && streams.m[streams.m.length - 1] > 0
+      ? { distance_m: streams.d[streams.d.length - 1] - streams.d[0], moving_s: streams.m[streams.m.length - 1] - streams.m[0] }
+      : { distance_m: run.distance_m, moving_s: run.moving_s };
+  const average = whole.distance_m / Math.max(1, whole.moving_s);
+
+  // Each song once, as on the app: a song that played more than once has its plays added together. Fastest first.
+  const bySong = new Map<string, { name: string; artist: string; image: string | null; plays: number; seconds: number; distance: number; moving: number }>();
+  for (const x of songs) {
+    const key = `${x.name}|${x.artist}`;
+    const r = bySong.get(key) ?? { name: x.name, artist: x.artist, image: x.image, plays: 0, seconds: 0, distance: 0, moving: 0 };
+    r.plays++;
+    r.seconds += x.end_s - x.start_s;
+    r.distance += x.distance_m;
+    r.moving += x.moving_s;
+    bySong.set(key, r);
+  }
+  const ranked = [...bySong.values()]
+    .map((r) => ({ ...r, speed: r.moving >= 5 && r.distance > 0 ? r.distance / r.moving : null }))
+    .sort((a, b) => (b.speed ?? -1) - (a.speed ?? -1));
+  // The fastest song had a minute or more of moving, so a few seconds at a light don't win it.
+  const fastest = ranked.find((r) => r.speed && r.moving >= 60) ?? null;
+  // How many songs, and how many plays when some came round again.
+  const songCount = `${plural(ranked.length, 'song')}${songs.length > ranked.length ? ` (${songs.length} plays)` : ''}`;
   const ins = await buildInsights(env, user, s);
   const have = ins.totals.runs_with_music;
   const t = await week(env, user);
@@ -552,14 +577,14 @@ async function activity(env: Env, origin: string, user: EmailUser, unit: string,
   const map = run.polyline && env.MAPBOX_TOKEN ? await mapLink(env, origin, run.id, songs.length) : null;
   const open = `${l.app}#/activity/${run.strava_id}`;
 
-  const gap = (x: ActivitySong) => u.against(speedOf(x), average, s).replace('than your average', `than this ${w.one}'s average`).replace('your usual', `this ${w.one}'s usual`);
+  const gap = (speed: number) => u.against(speed, average, s).replace('than your average', `than this ${w.one}'s average`).replace('your usual', `this ${w.one}'s usual`);
   const did = w.verb === 'run' ? 'ran' : 'rode';
   const when = `${kind(run.type ?? (s === 'ride' ? 'Ride' : 'Run'))} · ${whenDated(run.start_time, user.email_tz)}`;
   // Led by its fastest song, as the Sunday roundup is by the person's; without one, by the activity's name.
   const hero = fastest
-    ? `${kicker(`You ${did} fastest to`)}${songHero(fastest, u.rate(speedOf(fastest), s), gap(fastest))}
-${lede(esc(`${run.name}, ${whenDated(run.start_time, user.email_tz)}: the fastest of ${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}.`))}`
-    : `${kicker(when)}${headline(run.name)}${lede(esc(`${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}.`))}`;
+    ? `${kicker(`You ${did} fastest to`)}${songHero(fastest, u.rate(fastest.speed!, s), gap(fastest.speed!))}
+${lede(esc(`${run.name}, ${whenDated(run.start_time, user.email_tz)}: the fastest of ${songCount} over ${u.dist(run.distance_m)}.`))}`
+    : `${kicker(when)}${headline(run.name)}${lede(esc(`${songCount} over ${u.dist(run.distance_m)}.`))}`;
 
   // Each song wears its cover's color, as on the app's map: on the map, in the strip and around its cover below.
   // An email being sent waits until every cover has one, so the email and its map agree; a preview makes do.
@@ -584,7 +609,7 @@ ${lede(esc(`${run.name}, ${whenDated(run.start_time, user.email_tz)}: the fastes
   <td valign="top">
     <p style="margin:0;font:800 22px/1.25 ${FONT};color:${INK};letter-spacing:-0.02em;">${esc(run.name)}</p>
     <p style="margin:2px 0 12px;font:14px/1.4 ${FONT};color:${SOFT};">${esc(`${new Date(run.start_time * 1000).toLocaleDateString('en-US', { timeZone: tz, weekday: 'long', month: 'short', day: 'numeric' })}, ${clock(run.start_time)} – ${clock(run.start_time + run.elapsed_s)}`)}</p>
-    ${fact(u.dist(run.distance_m), 'distance')}${fact(length(run.moving_s), 'moving')}${fact(u.rate(average, s), s === 'ride' ? 'average speed' : 'average pace')}${run.avg_hr ? fact(`${Math.round(run.avg_hr)} bpm`, 'average heart rate') : ''}${fact(length(music), 'of music')}
+    ${fact(u.dist(run.distance_m), 'distance')}${fact(length(whole.moving_s), 'moving')}${fact(u.rate(average, s), s === 'ride' ? 'average speed' : 'average pace')}${heartRate ? fact(`${Math.round(heartRate)} bpm`, 'average heart rate') : ''}${fact(length(music), 'of music')}
   </td>
 </tr></table>`;
 
@@ -612,20 +637,6 @@ ${lede(esc(`${run.name}, ${whenDated(run.start_time, user.email_tz)}: the fastes
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;border-collapse:collapse;background:#efeee9;"><tr>${cells.join('')}</tr></table>
 </div>`;
 
-  // Fastest to slowest, as on the app: a song that played more than once is counted once, its plays added together.
-  const bySong = new Map<string, { name: string; artist: string; image: string | null; plays: number; seconds: number; distance: number; moving: number }>();
-  for (const x of songs) {
-    const key = `${x.name}|${x.artist}`;
-    const r = bySong.get(key) ?? { name: x.name, artist: x.artist, image: x.image, plays: 0, seconds: 0, distance: 0, moving: 0 };
-    r.plays++;
-    r.seconds += x.end_s - x.start_s;
-    r.distance += x.distance_m;
-    r.moving += x.moving_s;
-    bySong.set(key, r);
-  }
-  const ranked = [...bySong.values()]
-    .map((r) => ({ ...r, speed: r.moving >= 5 && r.distance > 0 ? r.distance / r.moving : null }))
-    .sort((a, b) => (b.speed ?? -1) - (a.speed ?? -1));
   const listed = ranked.slice(0, SONGS_LISTED);
   const framed = (x: { image: string | null; name: string }) =>
     x.image
@@ -658,15 +669,15 @@ ${button(open, `Open this ${w.one}`)}
 ${progress}
 ${t.runs + t.rides ? `${heading('This week')}${figures(weekTiles)}` : ''}`;
 
-  const subject = fastest ? `${run.name}: you ${did} fastest to ${fastest.name}` : `${run.name}: ${plural(songs.length, 'song')}`;
-  const preview = `${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}. ${weekLine}`;
+  const subject = fastest ? `${run.name}: you ${did} fastest to ${fastest.name}` : `${run.name}: ${songCount}`;
+  const preview = `${songCount} over ${u.dist(run.distance_m)}. ${weekLine}`;
   const footer = `You're getting this after each run and ride with music because you asked for it in Cadence. <a href="${esc(l.offActivity)}" style="color:${MUTED};">Just Sundays, please</a> · <a href="${esc(l.off)}" style="color:${MUTED};">Turn all emails off</a>.`;
   return {
     subject,
     preview,
     html: shell(subject, hero, body, preview, footer, l.app),
-    text: `${run.name}, ${whenDated(run.start_time, user.email_tz)}\n${u.dist(run.distance_m)} · ${length(run.moving_s)} · ${u.rate(average, s)} · ${length(music)} of music\n\n${
-      fastest ? `Fastest song: ${fastest.name} by ${fastest.artist}, ${u.rate(speedOf(fastest), s)}.\n\n` : ''
+    text: `${run.name}, ${whenDated(run.start_time, user.email_tz)}\n${u.dist(run.distance_m)} · ${length(whole.moving_s)} · ${u.rate(average, s)} · ${length(music)} of music\n\n${
+      fastest ? `Fastest song: ${fastest.name} by ${fastest.artist}, ${u.rate(fastest.speed!, s)}.\n\n` : ''
     }Fastest to slowest:\n${ranked.map((x) => `- ${x.name} · ${x.artist}: ${x.speed ? u.rate(x.speed, s) : '–'}`).join('\n')}\n\n${weekLine}\n${
       have >= RUNS_NEEDED ? '' : `${Math.min(have, RUNS_NEEDED - 1)} of ${RUNS_NEEDED} ${w.many} with music so far.\n`
     }\nOpen this ${w.one}: ${open}\nJust Sundays, please: ${l.offActivity}\nTurn all emails off: ${l.off}`,

@@ -173,12 +173,15 @@ export function mapboxUrl(token: string, polyline: string, streams: Streams | nu
         .filter((x) => x.to - x.from >= 1);
       for (const x of stretches) overlays.push(path(6, x.song.color, stretch(x.from, x.to)));
       // The longest stretches are pinned first, so the covers that fit are the songs that played longest.
+      // A song that came round again is pinned once, where it played longest.
+      const pinned = new Set<string>();
       for (const x of [...stretches].sort((a, b) => b.to - b.from - (a.to - a.from))) {
-        if (!pins || !x.song.pin || (x.to - x.from) * scale < PIN_ROOM) continue;
+        if (!pins || !x.song.pin || pinned.has(x.song.pin) || (x.to - x.from) * scale < PIN_ROOM) continue;
         const mid = at((x.from + x.to) / 2);
         const [sx, sy] = screen(mid);
         if (placed.some(([px, py]) => Math.hypot(px - sx, py - sy) < PIN_APART)) continue;
         placed.push([sx, sy]);
+        pinned.add(x.song.pin);
         markers.push(`url-${encodeURIComponent(x.song.pin)}(${mid[1].toFixed(5)},${mid[0].toFixed(5)})`);
       }
     }
@@ -196,7 +199,7 @@ async function signature(env: Env, runId: number): Promise<string> {
 }
 
 // Raised whenever the map is drawn differently, so pictures already cached are drawn again.
-const DESIGN = 2;
+const DESIGN = 3;
 
 /** `songs` only tells caches apart: a run that gains a late song gets a new picture. */
 export async function mapLink(env: Env, origin: string, runId: number, songs: number): Promise<string> {
