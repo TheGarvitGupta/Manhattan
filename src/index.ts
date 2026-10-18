@@ -15,7 +15,7 @@ const STATE_COOKIE = 'cadence_oauth';
 const SESSION_TTL = 30 * 86400;
 const DEMO_ATHLETE_ID = -1;
 // The schedule the emails go out on; it must match the second cron in wrangler.jsonc.
-const EMAIL_CRON = '5-59/10 * * * *';
+const EMAIL_CRON = '5,15,25,35,45,55 * * * *';
 
 async function currentUser(req: Request, env: Env): Promise<User | null> {
   const sid = getCookie(req, SESSION_COOKIE);

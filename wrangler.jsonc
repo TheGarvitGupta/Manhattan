@@ -22,7 +22,7 @@
   ],
   // Background sync: Spotify only keeps your last 50 tracks, so poll often.
   // Emails go out on the second schedule, five minutes after each sync, with their own allowance of requests.
-  "triggers": { "crons": ["*/10 * * * *", "5-59/10 * * * *"] },
+  "triggers": { "crons": ["*/10 * * * *", "5,15,25,35,45,55 * * * *"] },
   "vars": {
     // Must match the route path and the folder name under public/.
     "BASE_PATH": "/cadence",
