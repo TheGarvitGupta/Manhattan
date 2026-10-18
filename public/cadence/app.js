@@ -185,7 +185,7 @@ function header() {
 			h('summary', null, me.user.avatar ? h('img', { class: 'avatar', src: me.user.avatar, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { class: 'avatar' }), me.user.name),
 			h('div', { class: 'sheet' },
 				!me.user.is_demo && item('sync', 'Sync now', () => act(() => api('api/sync', 'POST'))),
-				item('mail', 'Emails', () => (location.hash = '#/emails')),
+				!me.user.is_demo && item('mail', 'Emails', () => (location.hash = '#/emails')),
 				!me.user.is_demo && me.spotify.connected && rule(),
 				!me.user.is_demo && me.spotify.connected && item('unlink', 'Disconnect Spotify', () => confirm('Disconnect Spotify? Songs already matched are kept.') && act(() => api('api/spotify', 'DELETE'))),
 				rule(),
@@ -1057,6 +1057,16 @@ function emailSettings() {
 
 function emailsPage() {
 	const { me } = state;
+	// Only the owner sees what each email looks like; everyone else, their own settings.
+	if (!me.owner) {
+		return h('div', { class: 'wrap' },
+			header(),
+			h('h1', { class: 'title' }, 'Emails'),
+			h('p', { class: 'when' }, 'Where Cadence sends your updates, and how often.'),
+			emailSettings(),
+			footer(),
+		);
+	}
 	const scenario = EMAIL_SCENARIOS.find((x) => x.id === state.emailScenario) || EMAIL_SCENARIOS[2];
 	const query = `?cast=${CAST}&units=${state.units}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}${scenario.variant ? `&variant=${scenario.variant}` : ''}`;
 
@@ -1090,8 +1100,8 @@ function emailsPage() {
 
 	return h('div', { class: 'wrap' },
 		header(),
-		h('h1', { class: 'title' }, me.user.is_demo ? 'Demo emails' : 'Emails'),
-		h('p', { class: 'when' }, me.user.is_demo ? 'What Cadence sends, filled in with the demo data.' : 'What Cadence sends, filled in with your own data.'),
+		h('h1', { class: 'title' }, 'Emails'),
+		h('p', { class: 'when' }, 'What Cadence sends, filled in with your own data.'),
 		emailSettings(),
 		h('div', { class: 'mailroom' },
 			h('div', { class: 'scenarios', role: 'group', 'aria-label': 'Which email to show' },
@@ -1115,7 +1125,7 @@ function render(keepScroll) {
 	if (state.me.email.required) return app.replaceChildren(emailGate());
 	const run = location.hash.match(/^#\/run\/(\d+)$/);
 	if (run) return runPage(run[1]);
-	if (location.hash === '#/emails') return app.replaceChildren(emailsPage());
+	if (location.hash === '#/emails' && !state.me.user.is_demo) return app.replaceChildren(emailsPage());
 	const activity = location.hash.match(/^#\/activity\/(-?\d+)$/);
 	const wasOpen = state.openActivity != null;
 	state.openActivity = activity ? Number(activity[1]) : null;

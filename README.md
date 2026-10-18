@@ -127,8 +127,10 @@ from `Cadence <no-reply@cadence.garvitgupta.com>`:
   then the email says how many there are so far.
 
 Turning emails off (on the Emails page, or from a link in any email) keeps the
-address. The Emails page shows each email filled in with the account's own data
-(or the demo runner's, until there is some), and when each was last sent.
+address. Everyone's Emails page holds their address and how often. The owner's
+(the first real account to give an address) also shows each email filled in
+with their own data (or the demo runner's, until there is some), and when each
+was last sent. Nobody else, the demo included, can see the previews.
 
 Emails go out through Resend (resend.com, free at this volume). Sending is off
 until it is set up:

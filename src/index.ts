@@ -94,6 +94,12 @@ async function spotifyCallback(req: Request, env: Env, user: User, ctx: Executio
   return redirect(`${env.BASE_PATH}/`, [setCookie(req, env, STATE_COOKIE, '', 0)]);
 }
 
+/** The app's owner is whoever set it up: the first real account with an email on it. Only they see the emails' previews. */
+async function ownerId(env: Env): Promise<number | null> {
+  const owner = await env.DB.prepare(`SELECT id FROM users WHERE is_demo = 0 AND email IS NOT NULL ORDER BY id LIMIT 1`).first<{ id: number }>();
+  return owner?.id ?? null;
+}
+
 async function me(env: Env, user: User) {
   const tokens = await env.DB.prepare(`SELECT provider, status, last_sync_at, last_error FROM tokens WHERE user_id = ?`)
     .bind(user.id)
@@ -130,6 +136,8 @@ async function me(env: Env, user: User) {
     counts,
     since: since?.t ?? null,
     mapbox: env.MAPBOX_TOKEN ?? null,
+    // The owner sees what every email looks like; everyone else only their own settings.
+    owner: !user.is_demo && (await ownerId(env)) === user.id,
     // Whether they have already asked the owner to be added to Spotify.
     access_requested: !!asked,
     email: {
@@ -367,6 +375,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   // Previews of the emails, built from this account's own data.
   const emailMatch = path.match(/^\/api\/emails\/(welcome|weekly|activity)(\/html)?$/);
   if (emailMatch && method === 'GET') {
+    if (user.is_demo || (await ownerId(env)) !== user.id) return json({ error: 'not found' }, 404);
     const variant = url.searchParams.get('variant');
     // Times in a preview follow the viewer's own timezone.
     let viewer = { ...(user as EmailUser), email_tz: (user as EmailUser).email_tz ?? url.searchParams.get('tz') };
@@ -433,8 +442,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     await env.DB.prepare(`INSERT INTO access_requests (user_id, spotify_email, message, created_at) VALUES (?, ?, ?, ?)`)
       .bind(user.id, address, message || null, now())
       .run();
-    // The owner is whoever set the app up: the first real account with an email on it.
-    const owner = await env.DB.prepare(`SELECT email FROM users WHERE is_demo = 0 AND email IS NOT NULL ORDER BY id LIMIT 1`).first<{ email: string }>();
+    const owner = await env.DB.prepare(`SELECT email FROM users WHERE id = ?`).bind(await ownerId(env)).first<{ email: string }>();
     if (owner) await send(env, owner.email, accessRequestEmail(env, url.origin, user, address, message), undefined, address).catch(console.error);
     return json({ ok: true });
   }
