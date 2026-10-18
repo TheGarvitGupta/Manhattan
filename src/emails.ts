@@ -235,11 +235,12 @@ async function welcome(env: Env, origin: string, user: EmailUser): Promise<Email
 </tr>`;
 
   // What they asked for.
-  const what = user.activity_emails ? 'the Sunday roundup and a note after each run or ride' : 'the Sunday roundup';
+  const what =
+    [user.email_weekly === 0 ? '' : 'the Sunday roundup', user.activity_emails ? 'a note after each run or ride' : ''].filter(Boolean).join(' and ') || 'your emails';
   const hero = `${kicker('Welcome')}${headline(`You're in, ${firstName(user)}.`)}${lede('Cadence lines up your Strava runs and rides with what you were listening to on Spotify, and finds the songs you go fastest to.')}`;
   const body = `
 ${button(l.confirm, 'Confirm my email')}
-<p style="margin:0;font:13px/1.5 ${FONT};color:${MUTED};">One tap, so ${esc(what)} ${user.activity_emails ? 'go' : 'goes'} to the right person.</p>
+<p style="margin:0;font:13px/1.5 ${FONT};color:${MUTED};">One tap, so ${esc(what)} ${what.includes(' and ') || what === 'your emails' ? 'go' : 'goes'} to the right person.</p>
 ${heading('What happens next')}
 ${table(
   step(true, 'Strava connected', 'New activities arrive on their own.') +
@@ -251,7 +252,7 @@ ${table(
     subject: 'Welcome to Cadence',
     preview: 'Confirm your email, then just run or ride with music on.',
     html: shell('Welcome to Cadence', hero, body, 'Confirm your email, then just run or ride with music on.', `You're getting this because you gave Cadence your email address. <a href="${esc(l.off)}" style="color:${MUTED};">Turn them off</a>.`, l.app),
-    text: `You're in, ${firstName(user)}.\n\nConfirm your email: ${l.confirm}\n\nWhat happens next: run or ride with music on. After ${RUNS_NEEDED} runs, or ${RUNS_NEEDED} rides, your fastest and slowest songs appear. You'll get ${what === 'the Sunday roundup' ? 'a short roundup every Sunday at 9am' : 'a short roundup every Sunday at 9am, and a note after each run or ride with music'}.\n\nOpen Cadence: ${l.app}\nTurn these emails off: ${l.off}`,
+    text: `You're in, ${firstName(user)}.\n\nConfirm your email: ${l.confirm}\n\nWhat happens next: run or ride with music on. After ${RUNS_NEEDED} runs, or ${RUNS_NEEDED} rides, your fastest and slowest songs appear. You'll get ${what}.\n\nOpen Cadence: ${l.app}\nTurn these emails off: ${l.off}`,
   };
 }
 

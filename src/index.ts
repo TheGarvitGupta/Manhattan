@@ -470,7 +470,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
       .run();
     if (welcome) {
       // The welcome email carries the confirm button; the others wait for it.
-      const email = await buildEmail(env, url.origin, { ...me, email: address, email_token: token, activity_emails: activity ? 1 : 0 }, 'welcome');
+      const email = await buildEmail(env, url.origin, { ...me, email: address, email_token: token, email_weekly: body.weekly === false ? 0 : 1, activity_emails: activity ? 1 : 0 }, 'welcome');
       if (email && (await send(env, address, email, `${url.origin}${env.BASE_PATH}/auth/email/off?t=${token}`))) {
         await env.DB.prepare(`UPDATE users SET welcome_sent_at = ? WHERE id = ?`).bind(now(), user.id).run();
       }

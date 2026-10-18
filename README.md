@@ -108,8 +108,8 @@ there is a new migration).
 ## Emails
 
 Strava does not share an email address, so a new account is asked for one
-before anything else, and picks how often to hear from Cadence: Sundays only,
-or Sundays plus a note after every run or ride. Written in `src/emails.ts`,
+before anything else, with two switches, both on to start: the Sunday roundup,
+and a note after each activity. Written in `src/emails.ts`,
 from `Cadence <no-reply@cadence.garvitgupta.com>`:
 
 - **Welcome**: once, when someone gives an address. It carries the

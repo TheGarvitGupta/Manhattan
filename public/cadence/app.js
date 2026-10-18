@@ -980,30 +980,24 @@ const ICONS = {
 };
 const icon = (name) => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: ICONS[name] }));
 
-// How often someone hears from Cadence. The Sunday roundup always comes; the note after each activity is extra.
-const CADENCES = [
-	{ id: 'weekly', title: 'Sundays', text: 'A roundup every Sunday at 9am: your week, and your fastest songs once there are enough runs or rides.' },
-	{ id: 'activity', title: 'Sundays, and after every run or ride', text: 'Also a note when you finish: your route on a map, each song in its own colour, and how fast you went to each.' },
-];
-
-/** The choice between the two, as a pair of radio cards. `off` adds a third, for turning emails off. Returns the element and a reader. */
-function cadencePicker(current, off) {
-	const options = off ? [...CADENCES, { id: 'off', title: 'No emails', text: 'Cadence keeps your address, and sends nothing.' }] : CADENCES;
-	const name = `cadence-${Math.random().toString(36).slice(2, 8)}`;
-	const radios = options.map((o) => h('input', { type: 'radio', name, value: o.id, checked: o.id === current }));
-	const el = h('div', { class: 'choices', role: 'radiogroup', 'aria-label': 'How often to email you' },
-		options.map((o, i) => h('label', { class: 'choice' }, radios[i], h('span', null, h('b', null, o.title), h('span', null, o.text)))));
-	return { el, value: () => radios.find((r) => r.checked)?.value ?? 'weekly' };
+/** Which emails to get: two switches, each on or off. Returns the element and a reader. */
+function emailSwitches(weekly, activity) {
+	const box = (on) => h('input', { type: 'checkbox', role: 'switch', checked: on });
+	const [sunday, each] = [box(weekly), box(activity)];
+	const el = h('div', { class: 'switches' },
+		h('label', { class: 'switch' }, h('span', null, 'Sunday roundup'), sunday),
+		h('label', { class: 'switch' }, h('span', null, 'After each activity'), each));
+	return { el, value: () => ({ weekly: sunday.checked, activity: each.checked }) };
 }
 
-const saveEmail = (address, cadence) =>
-	api('api/email', 'POST', { email: address, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, units: state.units, weekly: cadence !== 'off', activity: cadence === 'activity' });
+const saveEmail = (address, which) =>
+	api('api/email', 'POST', { email: address, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, units: state.units, ...which });
 
 /** Before anything else, a new account gives an email address and picks how often to hear from Cadence. */
 function emailGate() {
 	const { me } = state;
 	const input = h('input', { class: 'field', type: 'email', required: true, placeholder: 'you@example.com', autocomplete: 'email', 'aria-label': 'Email address' });
-	const picker = cadencePicker('weekly');
+	const picker = emailSwitches(true, true);
 	const error = h('p', { class: 'gate-error', role: 'alert', hidden: true });
 	const submit = h('button', { class: 'btn primary', type: 'submit' }, 'Continue');
 	const go = async () => {
@@ -1022,9 +1016,8 @@ function emailGate() {
 		header(),
 		h('form', { class: 'card gate', onsubmit: (e) => (e.preventDefault(), go()) },
 			h('h1', null, `Welcome, ${me.user.name.split(' ')[0]}. Where should updates go?`),
-			h('p', null, 'Strava doesn’t share your email, so Cadence asks. It’s only used for the emails you pick here, and you can change them any time.'),
+			h('p', null, 'Strava doesn’t share your email, so Cadence asks. It’s only used for these emails, and you can change them any time.'),
 			h('label', { class: 'gate-label' }, 'Email address', input),
-			h('div', { class: 'gate-label' }, 'How often'),
 			picker.el,
 			error,
 			submit,
@@ -1037,12 +1030,11 @@ function emailGate() {
 function emailSettings() {
 	const { me } = state;
 	if (me.user.is_demo) return null;
-	const current = !me.email.weekly && !me.email.activity ? 'off' : me.email.activity ? 'activity' : 'weekly';
 	const input = h('input', { class: 'field', type: 'email', required: true, autocomplete: 'email', 'aria-label': 'Email address', value: me.email.address || '' });
-	const picker = cadencePicker(current, true);
+	const picker = emailSwitches(me.email.weekly, me.email.activity);
 	const status = !me.email.available
 		? 'Sending isn’t switched on yet. Your choice is saved; these are previews built from your own data.'
-		: current === 'off'
+		: !me.email.weekly && !me.email.activity
 			? 'Emails are off.'
 			: me.email.confirmed
 				? `Going to ${me.email.address}.`
