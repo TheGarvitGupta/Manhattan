@@ -148,6 +148,17 @@ const figures = (items: [string, string][]) =>
     )
     .join('')}</tr></table>`;
 
+/** On the violet band: a song's cover, large and framed in white, beside its name, artist and how fast it went. */
+const songHero = (song: { image: string | null; name: string; artist: string }, rate: string, against: string) => `
+<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+  <td width="104" valign="middle" style="padding-right:18px;">${song.image ? `<img src="${esc(song.image)}" width="104" height="104" alt="" style="display:block;border-radius:18px;border:3px solid #ffffff;">` : cover(null, song.name, 104)}</td>
+  <td valign="middle">
+    <h1 style="margin:0;font:800 32px/1.1 ${FONT};color:#ffffff;letter-spacing:-0.025em;">${esc(song.name)}</h1>
+    <p style="margin:4px 0 10px;font:16px ${FONT};color:#e4dffc;">${esc(song.artist)}</p>
+    <p style="margin:0;font:15px/1.4 ${FONT};color:#e4dffc;"><b style="font-weight:800;font-size:22px;color:${GOLD};">${esc(rate)}</b>&nbsp; ${esc(against)}</p>
+  </td>
+</tr></table>`;
+
 // Pieces of the violet band at the top of every email.
 const kicker = (text: string) => `<p style="margin:22px 0 6px;font:700 13px/1.4 ${FONT};color:${GOLD};letter-spacing:0.06em;text-transform:uppercase;">${esc(text)}</p>`;
 const headline = (text: string) => `<h1 style="margin:0;font:800 32px/1.1 ${FONT};color:#ffffff;letter-spacing:-0.025em;">${esc(text)}</h1>`;
@@ -436,15 +447,7 @@ ${button(l.app, 'Open Cadence')}`;
   const average = (s: Sport) => ins[s].totals.distance_m / ins[s].totals.moving_s;
   const top = ins[lead].fastest[0];
   const proof = (s: Sport, speed: number) => `${u.rate(speed, s)}, ${u.against(speed, average(s), s)}`;
-  const hero = `${kicker(`You ${WORDS[lead].verb} fastest to`)}
-<table role="presentation" cellpadding="0" cellspacing="0"><tr>
-  <td width="104" valign="middle" style="padding-right:18px;">${top.image ? `<img src="${esc(top.image)}" width="104" height="104" alt="" style="display:block;border-radius:18px;border:3px solid #ffffff;">` : cover(null, top.name, 104)}</td>
-  <td valign="middle">
-    ${headline(top.name)}
-    <p style="margin:4px 0 10px;font:16px ${FONT};color:#e4dffc;">${esc(top.artist)}</p>
-    <p style="margin:0;font:15px/1.4 ${FONT};color:#e4dffc;"><b style="font-weight:800;font-size:22px;color:${GOLD};">${esc(u.rate(top.speed, lead))}</b>&nbsp; ${esc(u.against(top.speed, average(lead), lead))}</p>
-  </td>
-</tr></table>`;
+  const hero = `${kicker(`You ${WORDS[lead].verb} fastest to`)}${songHero(top, u.rate(top.speed, lead), u.against(top.speed, average(lead), lead))}`;
 
   const several = shown.length > 1;
   const block = (s: Sport) => sportBlock(ins[s], s, unit, user, several);
@@ -545,15 +548,20 @@ async function activity(env: Env, origin: string, user: EmailUser, unit: string,
   const map = run.polyline && env.MAPBOX_TOKEN ? await mapLink(env, origin, run.id, songs.length) : null;
   const open = `${l.app}#/activity/${run.strava_id}`;
 
-  const hero = `${kicker(`${kind(run.type ?? (s === 'ride' ? 'Ride' : 'Run'))} · ${whenDated(run.start_time, user.email_tz)}`)}${headline(run.name)}
-${lede(esc(`${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}${fastest ? `. You ${w.verb === 'run' ? 'ran' : 'rode'} fastest to ${fastest.name}.` : '.'}`))}`;
+  const gap = (x: ActivitySong) => u.against(speedOf(x), average, s).replace('than your average', `than this ${w.one}`).replace('your usual', `this ${w.one}'s usual`);
+  const did = w.verb === 'run' ? 'ran' : 'rode';
+  const when = `${kind(run.type ?? (s === 'ride' ? 'Ride' : 'Run'))} · ${whenDated(run.start_time, user.email_tz)}`;
+  // Led by its fastest song, as the Sunday roundup is by the person's; without one, by the activity's name.
+  const hero = fastest
+    ? `${kicker(`You ${did} fastest to`)}${songHero(fastest, u.rate(speedOf(fastest), s), gap(fastest))}
+${lede(esc(`${run.name}, ${whenDated(run.start_time, user.email_tz)}: the fastest of ${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}.`))}`
+    : `${kicker(when)}${headline(run.name)}${lede(esc(`${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}.`))}`;
 
   // Each song's cover wears its colour on the map.
   const swatch = (x: ActivitySong, i: number) =>
     x.image
       ? `<img src="${esc(x.image)}" width="38" height="38" alt="" style="display:block;border:3px solid ${songColor(i)};border-radius:11px;">`
       : `<div style="width:38px;height:38px;border:3px solid ${songColor(i)};border-radius:11px;background:#eeede8;color:${MUTED};font:600 16px/38px ${FONT};text-align:center;">${esc((x.name || '?')[0])}</div>`;
-  const gap = (x: ActivitySong) => u.against(speedOf(x), average, s).replace('than your average', `than this ${w.one}`).replace('your usual', `this ${w.one}'s usual`);
   const listed = songs.slice(0, SONGS_LISTED);
 
   const progress =
@@ -576,11 +584,6 @@ ${figures([
   [length(run.moving_s), 'moving'],
   [u.rate(average, s), s === 'ride' ? 'average speed' : 'average pace'],
 ])}
-${
-  fastest
-    ? `${heading(`Fastest song on this ${w.one}`)}${table(row(fastest.image, fastest.name, fastest.artist, u.rate(speedOf(fastest), s), gap(fastest)))}`
-    : ''
-}
 ${heading('What was playing')}
 ${table(listed.map((x, i) => row(null, x.name, `${x.artist} · at ${minSec(x.start_s)}${x.skipped ? ' · cut short' : ''}`, u.rate(speedOf(x), s), gap(x).replace(` than this ${w.one}`, ''), swatch(x, i))).join(''))}
 ${songs.length > listed.length ? para(esc(`And ${plural(songs.length - listed.length, 'more song')}, on the site.`)) : ''}
@@ -588,7 +591,7 @@ ${button(open, `Open this ${w.one}`)}
 ${t.runs + t.rides ? `${heading('This week')}${figures(weekTiles)}` : ''}
 ${progress}`;
 
-  const subject = fastest ? `${run.name}: you ${w.verb === 'run' ? 'ran' : 'rode'} fastest to ${fastest.name}` : `${run.name}: ${plural(songs.length, 'song')}`;
+  const subject = fastest ? `${run.name}: you ${did} fastest to ${fastest.name}` : `${run.name}: ${plural(songs.length, 'song')}`;
   const preview = `${plural(songs.length, 'song')} over ${u.dist(run.distance_m)}. ${weekLine}`;
   const footer = `You're getting this after each run and ride with music because you asked for it in Cadence. <a href="${esc(l.offActivity)}" style="color:${MUTED};">Just Sundays, please</a> · <a href="${esc(l.off)}" style="color:${MUTED};">Turn all emails off</a>.`;
   return {
